@@ -213,3 +213,5 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Coding Agents
+.claude

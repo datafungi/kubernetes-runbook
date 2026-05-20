@@ -1,0 +1,14 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: simple-cluster
+servers: 1
+agents: 2
+network: k3dcluster
+options:
+  runtime:
+    # Current k3d v1alpha5 config supports per-role memory settings here.
+    # k3d does not currently expose an equivalent per-node CPU setting in the
+    # config schema, so CPU sizing still has to be handled outside this file.
+    serversMemory: 2g
+    agentsMemory: 4g
