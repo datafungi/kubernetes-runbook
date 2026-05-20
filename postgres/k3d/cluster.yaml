@@ -1,0 +1,44 @@
+# CloudNativePG Cluster — k3d (local development / testing)
+# 3-instance HA setup mirroring the cloud production configs.
+# No WAL archiving — backups are out of scope for local dev.
+#
+# Prerequisites:
+#   1. Create the k3d cluster (volume mount and server taint are in the config):
+#        k3d cluster create --config setup/k3d/config.yaml
+#   2. Apply the StorageClass first:
+#        kubectl apply -f k3d/storageclass.yaml
+#
+# Deploy:
+#   kubectl apply -f k3d/cluster.yaml
+#   kubectl cnpg status pg-cluster
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: default
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie
+  primaryUpdateStrategy: unsupervised
+
+  storage:
+    size: 2Gi
+    storageClass: local-path-retain
+
+  postgresql:
+    parameters:
+      max_connections: "50"
+      shared_buffers: "256MB"
+      effective_cache_size: "768MB"
+      maintenance_work_mem: "64MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"

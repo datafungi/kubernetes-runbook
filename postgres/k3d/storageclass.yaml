@@ -1,0 +1,22 @@
+# local-path StorageClass with production-equivalent policies.
+#
+# The local-path provisioner stores data inside the k3d node container at:
+#   /var/lib/rancher/k3s/storage/pvc-<uid>_<namespace>_<pvc-name>/
+#
+# By default this lives only inside Docker. To persist data on the host and
+# make the path inspectable, create the k3d cluster with a volume mount:
+#
+#   k3d cluster create dev \
+#     --volume /tmp/k3d-storage:/var/lib/rancher/k3s/storage@all
+#
+# Data is then accessible on the host at:
+#   /tmp/k3d-storage/pvc-<uid>_<namespace>_<pvc-name>/
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path-retain
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer   # matches cloud production setup
+reclaimPolicy: Retain                     # matches cloud production setup

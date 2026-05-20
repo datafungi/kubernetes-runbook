@@ -1,0 +1,69 @@
+# CloudNativePG Cluster — EKS
+#
+# Prerequisites — create backup secret before applying:
+#   kubectl create secret generic aws-s3-credentials \
+#     --from-literal=ACCESS_KEY_ID=<YOUR_KEY_ID> \
+#     --from-literal=ACCESS_SECRET_KEY=<YOUR_SECRET> \
+#     --from-literal=DATA_ACCESS_REGION=<YOUR_REGION>
+#
+# IRSA (recommended alternative to static credentials):
+#   Annotate the CloudNativePG service account with an IAM role ARN that has
+#   s3:GetObject, s3:PutObject, s3:DeleteObject on your backup bucket.
+#   Then remove the s3Credentials block below.
+#   See: https://cloudnative-pg.io/documentation/current/backup_recovery/
+#
+# Replace placeholders:
+#   <YOUR_BUCKET>  — S3 bucket name for backups
+#
+# Deploy:
+#   kubectl apply -f eks/storageclass.yaml
+#   kubectl apply -f eks/cluster.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: default
+spec:
+  instances: 3
+  primaryUpdateStrategy: unsupervised   # zero-downtime minor version upgrades
+
+  storage:
+    size: 50Gi
+    storageClass: postgres-gp3
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "512MB"
+      effective_cache_size: "1536MB"
+      maintenance_work_mem: "128MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://<YOUR_BUCKET>/pg-cluster/"
+      s3Credentials:
+        accessKeyId:
+          name: aws-s3-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: aws-s3-credentials
+          key: ACCESS_SECRET_KEY
+        region:
+          name: aws-s3-credentials
+          key: DATA_ACCESS_REGION
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"

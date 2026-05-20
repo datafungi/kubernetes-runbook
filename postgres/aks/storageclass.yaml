@@ -1,0 +1,12 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: postgres-premium
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Premium_LRS    # Azure Premium SSD (P-series)
+volumeBindingMode: WaitForFirstConsumer   # ensures PV lands in same AZ as pod
+reclaimPolicy: Retain                     # prevents accidental data deletion
+allowVolumeExpansion: true

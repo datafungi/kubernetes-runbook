@@ -3,12 +3,23 @@ kind: Simple
 metadata:
   name: simple-cluster
 servers: 1
-agents: 2
+agents: 3
 network: k3dcluster
+volumes:
+  # Mounts a host path into each node so PostgreSQL PV data persists across
+  # cluster restarts. The local-path provisioner writes to this path.
+  - volume: /tmp/k3d-storage:/var/lib/rancher/k3s/storage
+    nodeFilters:
+      - all
 options:
   runtime:
-    # Current k3d v1alpha5 config supports per-role memory settings here.
-    # k3d does not currently expose an equivalent per-node CPU setting in the
-    # config schema, so CPU sizing still has to be handled outside this file.
+    # Server node only runs control-plane components — 2g is sufficient.
     serversMemory: 2g
     agentsMemory: 4g
+  k3s:
+    extraArgs:
+      # Taint the server node so no workloads schedule on it.
+      # Each of the 3 agent nodes (4g) is dedicated to one PostgreSQL pod.
+      - arg: "--node-taint=node-role.kubernetes.io/control-plane:NoSchedule"
+        nodeFilters:
+          - server:*

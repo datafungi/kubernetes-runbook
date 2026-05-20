@@ -16,8 +16,10 @@ The cluster is defined in [`config.yaml`](./config.yaml):
 |----------------|-------------------|
 | Cluster name   | `simple-cluster`  |
 | Docker network | `k3dcluster`      |
-| Server nodes   | 1 (2 GB RAM)      |
-| Agent nodes    | 2 (4 GB RAM each) |
+| Server nodes   | 1 (2 GB RAM) — control plane only, tainted `NoSchedule` |
+| Agent nodes    | 3 (4 GB RAM each) — one per PostgreSQL instance |
+
+The server node is tainted `node-role.kubernetes.io/control-plane:NoSchedule` so no workloads schedule on it. All three agent nodes are available exclusively for application pods, giving each PostgreSQL instance a dedicated 4 GB node.
 
 ## Creating the Cluster
 
@@ -75,6 +77,7 @@ docker update --cpus=2 k3d-simple-cluster-server-0
 # Agent nodes
 docker update --cpus=2 k3d-simple-cluster-agent-0
 docker update --cpus=2 k3d-simple-cluster-agent-1
+docker update --cpus=2 k3d-simple-cluster-agent-2
 ```
 
 Adjust the `--cpus` value to suit your machine. The changes take effect immediately without restarting the containers.
@@ -82,3 +85,5 @@ Adjust the `--cpus` value to suit your machine. The changes take effect immediat
 ## Notes
 
 - The `serversMemory` / `agentsMemory` settings in `config.yaml` map to Docker's `--memory` flag for each container. You can also adjust memory after creation with `docker update --memory=<value>`.
+- The volume mount (`/tmp/k3d-storage`) is defined in `config.yaml` and applied to all nodes automatically. PostgreSQL PV data written by the `local-path` provisioner persists at `/tmp/k3d-storage/pvc-<uid>_<namespace>_<pvc-name>/` on your host.
+- The server node taint (`node-role.kubernetes.io/control-plane:NoSchedule`) is applied via a k3s `--node-taint` server arg in `config.yaml`. No additional configuration is needed on the PostgreSQL side — pods without a matching toleration are automatically excluded from the server node.

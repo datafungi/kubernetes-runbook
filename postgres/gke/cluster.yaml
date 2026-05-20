@@ -1,0 +1,60 @@
+# CloudNativePG Cluster — GKE
+#
+# Prerequisites — create backup secret before applying:
+#   kubectl create secret generic gcs-credentials \
+#     --from-file=credentials.json=/path/to/service-account.json
+#
+# Workload Identity (recommended alternative to static key):
+#   Remove the googleCredentials block below and bind the CloudNativePG
+#   service account to a GCP service account with Storage Object Admin on your bucket.
+#   See: https://cloudnative-pg.io/documentation/current/backup_recovery/
+#
+# Replace placeholders:
+#   <YOUR_BUCKET>  — GCS bucket name for backups
+#
+# Deploy:
+#   kubectl apply -f gke/storageclass.yaml
+#   kubectl apply -f gke/cluster.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: default
+spec:
+  instances: 3
+  primaryUpdateStrategy: unsupervised   # zero-downtime minor version upgrades
+
+  storage:
+    size: 50Gi
+    storageClass: postgres-ssd
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "512MB"
+      effective_cache_size: "1536MB"
+      maintenance_work_mem: "128MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "gs://<YOUR_BUCKET>/pg-cluster/"
+      googleCredentials:
+        applicationCredentials:
+          name: gcs-credentials
+          key: credentials.json
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"

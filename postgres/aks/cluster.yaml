@@ -1,0 +1,60 @@
+# CloudNativePG Cluster — AKS
+#
+# Prerequisites — create backup secret before applying:
+#   kubectl create secret generic azure-storage-secret \
+#     --from-literal=storage-account-name=<STORAGE_ACCOUNT> \
+#     --from-literal=storage-account-key=<STORAGE_KEY>
+#
+# Replace placeholders:
+#   <STORAGE_ACCOUNT>  — Azure storage account name
+#   <CONTAINER>        — Azure Blob container name for backups
+#
+# Deploy:
+#   kubectl apply -f aks/storageclass.yaml
+#   kubectl apply -f aks/cluster.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: default
+spec:
+  instances: 3
+  primaryUpdateStrategy: unsupervised   # zero-downtime minor version upgrades
+
+  storage:
+    size: 50Gi
+    storageClass: postgres-premium
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "512MB"
+      effective_cache_size: "1536MB"
+      maintenance_work_mem: "128MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "https://<STORAGE_ACCOUNT>.blob.core.windows.net/<CONTAINER>/"
+      azureCredentials:
+        storageAccount:
+          name: azure-storage-secret
+          key: storage-account-name
+        storageKey:
+          name: azure-storage-secret
+          key: storage-account-key
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"

@@ -1,0 +1,17 @@
+# Requires the EBS CSI driver add-on (included by default on EKS 1.23+).
+# gp3 replaces gp2 as the recommended EBS type — better baseline IOPS and throughput
+# at the same or lower cost, with independent IOPS/throughput tuning.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: postgres-gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "4000"         # baseline 3000; tune up to 16000 for latency-sensitive workloads
+  throughput: "200"    # MB/s; baseline 125
+volumeBindingMode: WaitForFirstConsumer   # ensures PV lands in same AZ as pod
+reclaimPolicy: Retain                     # prevents accidental data deletion
+allowVolumeExpansion: true

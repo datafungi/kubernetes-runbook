@@ -1,0 +1,12 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: postgres-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-ssd    # SSD Persistent Disk; use hyperdisk-balanced on GKE 1.28+
+volumeBindingMode: WaitForFirstConsumer   # ensures PV lands in same zone as pod
+reclaimPolicy: Retain                     # prevents accidental data deletion
+allowVolumeExpansion: true

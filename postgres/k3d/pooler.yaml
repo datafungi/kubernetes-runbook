@@ -1,0 +1,40 @@
+# PgBouncer connection poolers for k3d — mirrors the cloud production setup.
+#
+# Services created:
+#   pg-cluster-pooler-rw  — primary (writes)
+#   pg-cluster-pooler-ro  — replicas (reads)
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: pg-cluster-pooler-rw
+  namespace: default
+spec:
+  cluster:
+    name: pg-cluster
+  instances: 2
+  type: rw
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      max_client_conn: "1000"
+      default_pool_size: "25"
+      reserve_pool_size: "5"
+      reserve_pool_timeout: "3"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: pg-cluster-pooler-ro
+  namespace: default
+spec:
+  cluster:
+    name: pg-cluster
+  instances: 2
+  type: ro
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      max_client_conn: "1000"
+      default_pool_size: "25"
+      reserve_pool_size: "5"
+      reserve_pool_timeout: "3"
