@@ -1,0 +1,78 @@
+# kube-prometheus-stack values — k3d (local development)
+# Source: prometheus-community/kube-prometheus-stack
+#
+# Tuned for k3d: ephemeral storage, no node-exporter, no alertmanager,
+# disabled rules for components not exposed in k3d (etcd, controller-manager, etc.)
+#
+# Install:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm install monitoring prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring --create-namespace \
+#     -f monitoring/k3d/values.yaml
+
+prometheus:
+  prometheusSpec:
+    # Allow scraping PodMonitors and ServiceMonitors from any namespace.
+    # Without these, only monitors in the same namespace as Prometheus are picked up.
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    retention: 24h
+    # No persistent storage — metrics are ephemeral in local dev.
+    storageSpec: {}
+
+grafana:
+  enabled: true
+  adminPassword: prom-operator
+  persistence:
+    enabled: false
+  defaultDashboardsEnabled: false
+  sidecar:
+    dashboards:
+      enabled: false
+
+alertmanager:
+  enabled: false
+
+# Components not exposed or relevant in a k3d cluster
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+defaultRules:
+  create: true
+  rules:
+    alertmanager: false
+    etcd: false
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserver: false
+    kubeApiserverAvailability: false
+    kubeApiserverSlos: false
+    kubelet: true
+    kubeProxy: false
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: false
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: false
+    kubernetesSystem: false
+    kubeScheduler: false
+    kubeStateMetrics: true
+    network: false
+    node: false
+    nodeExporterAlerting: false
+    nodeExporterRecording: false
+    prometheus: true
+    prometheusOperator: true
