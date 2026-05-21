@@ -1,0 +1,41 @@
+# RedisSentinel — k3d (local development / testing)
+# 3 Sentinel instances monitoring the redis-replication group.
+# Quorum = 2: 2 of 3 Sentinels must agree before a failover is triggered.
+#
+# Deploy AFTER redis-replication pods are Ready:
+#   kubectl apply -f k3d/sentinel.yaml
+#   kubectl get redissentinel sentinel
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: RedisSentinel
+metadata:
+  name: sentinel
+  namespace: default
+spec:
+  clusterSize: 3
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+  pdb:
+    enabled: false
+    minAvailable: 1
+  redisSentinelConfig:
+    redisReplicationName: redis-replication
+    masterGroupName: myMaster
+    quorum: "2"
+    downAfterMilliseconds: "5000"
+    failoverTimeout: "10000"
+    parallelSyncs: "1"
+    redisReplicationPassword:
+      secretKeyRef:
+        name: redis-secret
+        key: password
+  kubernetesConfig:
+    image: quay.io/opstree/redis-sentinel:latest
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 101m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 128Mi

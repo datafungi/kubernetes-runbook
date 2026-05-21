@@ -1,0 +1,57 @@
+# RedisReplication — k3d (local development / testing)
+# 3-node replication: 1 master + 2 replicas.
+# Operator: OpsTree redis-operator (ot-helm/redis-operator).
+#
+# Prerequisites:
+#   1. Install the OpsTree operator:
+#        helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/
+#        helm install redis-operator ot-helm/redis-operator \
+#          --namespace ot-operators --create-namespace
+#   2. Edit secret.yaml (replace the password), then apply:
+#        kubectl apply -f k3d/secret.yaml
+#
+# Deploy (RedisReplication must be Ready before applying sentinel.yaml):
+#   kubectl apply -f k3d/replication.yaml
+#   kubectl get redisreplication redis-replication
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: RedisReplication
+metadata:
+  name: redis-replication
+  namespace: default
+spec:
+  clusterSize: 3
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+  kubernetesConfig:
+    image: quay.io/opstree/redis:latest
+    imagePullPolicy: IfNotPresent
+    redisSecret:
+      name: redis-secret
+      key: password
+    resources:
+      requests:
+        cpu: 101m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 256Mi
+  redisExporter:
+    enabled: false
+    image: quay.io/opstree/redis-exporter:latest
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: local-path
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,138 @@
+# Redis — k3d (Local Development)
+
+Sentinel HA cluster: 1 master + 2 replicas with 3 Sentinel instances coordinating failover.
+Managed by the OpsTree redis-operator.
+
+## Files
+
+| File               | Purpose                                            |
+|--------------------|----------------------------------------------------|
+| `secret.yaml`      | Redis password secret (edit before applying)       |
+| `replication.yaml` | `RedisReplication` — 3-node master/replica group   |
+| `sentinel.yaml`    | `RedisSentinel` — 3 Sentinel instances, quorum = 2 |
+
+## Prerequisites
+
+Install the OpsTree redis-operator via Helm:
+
+```bash
+helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/
+helm repo update
+helm install redis-operator ot-helm/redis-operator \
+  --namespace ot-operators --create-namespace
+kubectl -n ot-operators rollout status deployment/redis-operator
+```
+
+## Deploy
+
+**Order matters** — Sentinel references the replication group by name and must be applied after the replication pods are Ready.
+
+```bash
+# 1. Set the password (edit secret.yaml first)
+kubectl apply -f k3d/secret.yaml
+
+# 2. Deploy the replication group and wait for all 3 pods
+kubectl apply -f k3d/replication.yaml
+kubectl rollout status statefulset/redis-replication
+
+# 3. Deploy Sentinel
+kubectl apply -f k3d/sentinel.yaml
+kubectl get redissentinel sentinel
+```
+
+Verify the topology:
+
+```bash
+# Check which pod is master
+kubectl exec -it redis-replication-0 -- redis-cli -a <password> INFO replication | grep role
+
+# Check sentinel sees the master
+kubectl exec -it sentinel-0 -- redis-cli -p 26379 SENTINEL masters
+```
+
+## Connect
+
+The password is stored in the secret you applied:
+
+```bash
+kubectl get secret redis-secret -o jsonpath='{.data.password}' | base64 -d
+```
+
+### Sentinel-aware connection (recommended)
+
+Apps connect to Sentinel on port `26379`. Sentinel returns the current master address, then the app connects directly to Redis. Use a Sentinel-capable client:
+
+| Language | Library         | Constructor                                                |
+|----------|-----------------|------------------------------------------------------------|
+| Python   | `redis-py`      | `Redis.from_url("redis+sentinel://")` or `Sentinel([...])` |
+| Go       | `go-redis`      | `NewSentinelClient`                                        |
+| Node.js  | `ioredis`       | `new Redis({ sentinels: [...] })`                          |
+| Java     | Lettuce / Jedis | `RedisClient.create(...)` (Sentinel URI)                   |
+
+Sentinel service DNS:
+
+```
+sentinel-0.sentinel.default.svc.cluster.local:26379
+sentinel-1.sentinel.default.svc.cluster.local:26379
+sentinel-2.sentinel.default.svc.cluster.local:26379
+```
+
+Reference in your application (Python `redis-py` example):
+
+```yaml
+env:
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: redis-secret
+        key: password
+  - name: REDIS_SENTINEL_HOSTS
+    value: "sentinel-0.sentinel.default.svc.cluster.local:26379,sentinel-1.sentinel.default.svc.cluster.local:26379,sentinel-2.sentinel.default.svc.cluster.local:26379"
+  - name: REDIS_MASTER_NAME
+    value: "myMaster"
+```
+
+### Direct connection (bypasses sentinel, not HA)
+
+To connect directly to the current master for debugging:
+
+```bash
+kubectl exec -it redis-replication-0 -- redis-cli -a <password> PING
+```
+
+## Sizing
+
+3 Redis pods on k3d agent nodes. Storage uses the k3d default `local-path` StorageClass (hostPath), backed by Docker's overlay filesystem. IOPS and latency depend on the host machine.
+
+| Resource            | Value                           |
+|---------------------|---------------------------------|
+| Pod CPU             | `101m` request / `1` limit      |
+| Pod memory          | `128Mi` request / `256Mi` limit |
+| Sentinel CPU        | `101m` request / `1` limit      |
+| Sentinel memory     | `128Mi` request / `128Mi` limit |
+| Storage per replica | `1Gi`                           |
+
+This setup is not suitable for realistic load testing. For load testing use a dedicated cloud environment with SSD-backed storage.
+
+## Services
+
+The operator creates headless services for DNS-based discovery:
+
+| Service             | Port  | Use for                               |
+|---------------------|-------|---------------------------------------|
+| `redis-replication` | 6379  | Redis (direct pod DNS, all replicas)  |
+| `sentinel`          | 26379 | Sentinel (master discovery, failover) |
+
+Individual pod DNS: `<pod-name>.<service-name>.default.svc.cluster.local`
+
+## Tear-down
+
+```bash
+kubectl delete -f k3d/sentinel.yaml
+kubectl delete -f k3d/replication.yaml
+kubectl delete -f k3d/secret.yaml
+```
+
+The `local-path` StorageClass uses `Delete` reclaim policy — PVCs and their data are removed automatically when the StatefulSet is deleted. No manual PVC cleanup is required.
+
+To delete the k3d cluster itself, see [`setup/k3d/README.md`](../../setup/k3d/README.md).
