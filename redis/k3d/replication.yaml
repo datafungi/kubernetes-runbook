@@ -17,7 +17,7 @@ apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: RedisReplication
 metadata:
   name: redis-replication
-  namespace: default
+  namespace: redis
 spec:
   clusterSize: 3
   podSecurityContext:
@@ -37,8 +37,8 @@ spec:
         cpu: "1"
         memory: 256Mi
   redisExporter:
-    enabled: false
-    image: quay.io/opstree/redis-exporter:latest
+    enabled: true
+    image: quay.io/opstree/redis-exporter:v1.44.0
     imagePullPolicy: IfNotPresent
     resources:
       requests:

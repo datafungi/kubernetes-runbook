@@ -43,12 +43,14 @@ Premium SSD v1 (`Premium_LRS`) provisions IOPS by disk tier — capacity and IOP
 
 ## Prerequisites
 
-### 1. Create the backup secret
+### 1. Create the namespace and backup secret
 
 ```bash
+kubectl create namespace postgres
 kubectl create secret generic azure-storage-secret \
   --from-literal=storage-account-name=<STORAGE_ACCOUNT> \
-  --from-literal=storage-account-key=<STORAGE_KEY>
+  --from-literal=storage-account-key=<STORAGE_KEY> \
+  -n postgres
 ```
 
 ### 2. Edit placeholders in `cluster.yaml`
@@ -65,7 +67,7 @@ kubectl apply -f storageclass.yaml
 kubectl apply -f cluster.yaml
 kubectl apply -f pooler.yaml
 kubectl apply -f scheduled-backup.yaml
-kubectl cnpg status pg-cluster
+kubectl cnpg status pg-cluster -n postgres
 ```
 
 ## Connect
@@ -74,10 +76,10 @@ CloudNativePG auto-generates credentials and stores them in two secrets:
 
 ```bash
 # Full connection URI (app user)
-kubectl get secret pg-cluster-app -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-app -n postgres -o jsonpath='{.data.uri}' | base64 -d
 
 # Superuser URI
-kubectl get secret pg-cluster-superuser -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-superuser -n postgres -o jsonpath='{.data.uri}' | base64 -d
 ```
 
 Reference in your application:
@@ -103,11 +105,11 @@ env:
 
 ```bash
 # Check scheduled backup status
-kubectl get scheduledbackup pg-cluster-backup
+kubectl get scheduledbackup pg-cluster-backup -n postgres
 
 # Trigger a manual backup
-kubectl cnpg backup pg-cluster
+kubectl cnpg backup pg-cluster -n postgres
 
 # List completed backups
-kubectl get backup
+kubectl get backup -n postgres
 ```

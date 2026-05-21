@@ -43,12 +43,17 @@ On GKE 1.28+ you can switch to `hyperdisk-balanced` for better price/performance
 
 ## Prerequisites
 
-### 1. Create the backup secret
+### 1. Create the namespace and backup secret
+
+```bash
+kubectl create namespace postgres
+```
 
 **Static service account key:**
 ```bash
 kubectl create secret generic gcs-credentials \
-  --from-file=credentials.json=/path/to/service-account.json
+  --from-file=credentials.json=/path/to/service-account.json \
+  -n postgres
 ```
 
 **Workload Identity (recommended):** Skip the secret. Bind the CloudNativePG service account to a GCP service account with `Storage Object Admin` on your bucket, then remove the `googleCredentials` block from `cluster.yaml`.
@@ -66,7 +71,7 @@ kubectl apply -f storageclass.yaml
 kubectl apply -f cluster.yaml
 kubectl apply -f pooler.yaml
 kubectl apply -f scheduled-backup.yaml
-kubectl cnpg status pg-cluster
+kubectl cnpg status pg-cluster -n postgres
 ```
 
 ## Connect
@@ -75,10 +80,10 @@ CloudNativePG auto-generates credentials and stores them in two secrets:
 
 ```bash
 # Full connection URI (app user)
-kubectl get secret pg-cluster-app -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-app -n postgres -o jsonpath='{.data.uri}' | base64 -d
 
 # Superuser URI
-kubectl get secret pg-cluster-superuser -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-superuser -n postgres -o jsonpath='{.data.uri}' | base64 -d
 ```
 
 Reference in your application:
@@ -104,11 +109,11 @@ env:
 
 ```bash
 # Check scheduled backup status
-kubectl get scheduledbackup pg-cluster-backup
+kubectl get scheduledbackup pg-cluster-backup -n postgres
 
 # Trigger a manual backup
-kubectl cnpg backup pg-cluster
+kubectl cnpg backup pg-cluster -n postgres
 
 # List completed backups
-kubectl get backup
+kubectl get backup -n postgres
 ```

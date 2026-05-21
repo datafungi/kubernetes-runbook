@@ -4,11 +4,12 @@
 
 ## Files
 
-| File                | Purpose                                                         |
-|---------------------|-----------------------------------------------------------------|
-| `storageclass.yaml` | `local-path` provisioner with `Retain` + `WaitForFirstConsumer` |
-| `cluster.yaml`      | 3-instance PostgreSQL cluster                                   |
-| `pooler.yaml`       | PgBouncer connection poolers (rw + ro)                          |
+| File                | Purpose                                                             |
+|---------------------|---------------------------------------------------------------------|
+| `storageclass.yaml` | `local-path` provisioner with `Retain` + `WaitForFirstConsumer`     |
+| `cluster.yaml`      | 3-instance PostgreSQL cluster                                       |
+| `pooler.yaml`       | PgBouncer connection poolers (rw + ro)                              |
+| `podmonitor.yaml`   | PodMonitor for Prometheus scraping (requires kube-prometheus-stack) |
 
 ## Storage Path
 
@@ -28,10 +29,11 @@ Data is then accessible on your host at `/tmp/k3d-storage/pvc-<uid>_<namespace>_
 ## Deploy
 
 ```bash
+kubectl create namespace postgres
 kubectl apply -f storageclass.yaml
 kubectl apply -f cluster.yaml
 kubectl apply -f pooler.yaml
-kubectl cnpg status pg-cluster
+kubectl cnpg status pg-cluster -n postgres
 ```
 
 ## Connect
@@ -40,10 +42,10 @@ CloudNativePG auto-generates credentials and stores them in two secrets:
 
 ```bash
 # Full connection URI (app user)
-kubectl get secret pg-cluster-app -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-app -n postgres -o jsonpath='{.data.uri}' | base64 -d
 
 # Superuser URI
-kubectl get secret pg-cluster-superuser -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-superuser -n postgres -o jsonpath='{.data.uri}' | base64 -d
 ```
 
 Reference in your application:
@@ -92,10 +94,10 @@ The `Retain` reclaim policy keeps PVCs and their backing volumes alive after the
 
 ```bash
 # List retained PVCs
-kubectl get pvc -n default -l cnpg.io/cluster=pg-cluster
+kubectl get pvc -n postgres -l cnpg.io/cluster=pg-cluster
 
 # Delete them (data will be permanently lost)
-kubectl delete pvc -n default -l cnpg.io/cluster=pg-cluster
+kubectl delete pvc -n postgres -l cnpg.io/cluster=pg-cluster
 
 # Remove the StorageClass
 kubectl delete -f storageclass.yaml

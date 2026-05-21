@@ -19,7 +19,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: pg-cluster
-  namespace: default
+  namespace: postgres
 spec:
   instances: 3
   primaryUpdateStrategy: unsupervised   # zero-downtime minor version upgrades

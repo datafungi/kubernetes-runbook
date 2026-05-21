@@ -43,14 +43,19 @@ The 3,000 IOPS / 125 MiB/s baseline is included at no extra cost regardless of v
 
 ## Prerequisites
 
-### 1. Create the backup secret
+### 1. Create the namespace and backup secret
+
+```bash
+kubectl create namespace postgres
+```
 
 **Static IAM credentials:**
 ```bash
 kubectl create secret generic aws-s3-credentials \
   --from-literal=ACCESS_KEY_ID=<YOUR_KEY_ID> \
   --from-literal=ACCESS_SECRET_KEY=<YOUR_SECRET> \
-  --from-literal=DATA_ACCESS_REGION=<YOUR_REGION>
+  --from-literal=DATA_ACCESS_REGION=<YOUR_REGION> \
+  -n postgres
 ```
 
 **IRSA (recommended):** Skip the secret. Annotate the CloudNativePG service account with an IAM role ARN that has `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on your bucket, then remove the `s3Credentials` block from `cluster.yaml`.
@@ -74,7 +79,7 @@ kubectl apply -f storageclass.yaml
 kubectl apply -f cluster.yaml
 kubectl apply -f pooler.yaml
 kubectl apply -f scheduled-backup.yaml
-kubectl cnpg status pg-cluster
+kubectl cnpg status pg-cluster -n postgres
 ```
 
 ## Connect
@@ -83,10 +88,10 @@ CloudNativePG auto-generates credentials and stores them in two secrets:
 
 ```bash
 # Full connection URI (app user)
-kubectl get secret pg-cluster-app -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-app -n postgres -o jsonpath='{.data.uri}' | base64 -d
 
 # Superuser URI
-kubectl get secret pg-cluster-superuser -o jsonpath='{.data.uri}' | base64 -d
+kubectl get secret pg-cluster-superuser -n postgres -o jsonpath='{.data.uri}' | base64 -d
 ```
 
 Reference in your application:
@@ -112,11 +117,11 @@ env:
 
 ```bash
 # Check scheduled backup status
-kubectl get scheduledbackup pg-cluster-backup
+kubectl get scheduledbackup pg-cluster-backup -n postgres
 
 # Trigger a manual backup
-kubectl cnpg backup pg-cluster
+kubectl cnpg backup pg-cluster -n postgres
 
 # List completed backups
-kubectl get backup
+kubectl get backup -n postgres
 ```

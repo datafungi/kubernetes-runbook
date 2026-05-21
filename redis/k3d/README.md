@@ -28,26 +28,29 @@ kubectl -n ot-operators rollout status deployment/redis-operator
 **Order matters** — Sentinel references the replication group by name and must be applied after the replication pods are Ready.
 
 ```bash
-# 1. Set the password (edit secret.yaml first)
+# 1. Create the namespace
+kubectl create namespace redis
+
+# 2. Set the password (edit secret.yaml first)
 kubectl apply -f k3d/secret.yaml
 
-# 2. Deploy the replication group and wait for all 3 pods
+# 3. Deploy the replication group and wait for all 3 pods
 kubectl apply -f k3d/replication.yaml
-kubectl rollout status statefulset/redis-replication
+kubectl rollout status statefulset/redis-replication -n redis
 
-# 3. Deploy Sentinel
+# 4. Deploy Sentinel
 kubectl apply -f k3d/sentinel.yaml
-kubectl get redissentinel sentinel
+kubectl get redissentinel sentinel -n redis
 ```
 
 Verify the topology:
 
 ```bash
 # Check which pod is master
-kubectl exec -it redis-replication-0 -- redis-cli -a <password> INFO replication | grep role
+kubectl exec -it redis-replication-0 -n redis -- redis-cli -a <password> INFO replication | grep role
 
 # Check sentinel sees the master
-kubectl exec -it sentinel-0 -- redis-cli -p 26379 SENTINEL masters
+kubectl exec -it sentinel-0 -n redis -- redis-cli -p 26379 SENTINEL masters
 ```
 
 ## Connect
@@ -55,7 +58,7 @@ kubectl exec -it sentinel-0 -- redis-cli -p 26379 SENTINEL masters
 The password is stored in the secret you applied:
 
 ```bash
-kubectl get secret redis-secret -o jsonpath='{.data.password}' | base64 -d
+kubectl get secret redis-secret -n redis -o jsonpath='{.data.password}' | base64 -d
 ```
 
 ### Sentinel-aware connection (recommended)
@@ -72,9 +75,9 @@ Apps connect to Sentinel on port `26379`. Sentinel returns the current master ad
 Sentinel service DNS:
 
 ```
-sentinel-0.sentinel.default.svc.cluster.local:26379
-sentinel-1.sentinel.default.svc.cluster.local:26379
-sentinel-2.sentinel.default.svc.cluster.local:26379
+sentinel-0.sentinel.redis.svc.cluster.local:26379
+sentinel-1.sentinel.redis.svc.cluster.local:26379
+sentinel-2.sentinel.redis.svc.cluster.local:26379
 ```
 
 Reference in your application (Python `redis-py` example):
@@ -87,7 +90,7 @@ env:
         name: redis-secret
         key: password
   - name: REDIS_SENTINEL_HOSTS
-    value: "sentinel-0.sentinel.default.svc.cluster.local:26379,sentinel-1.sentinel.default.svc.cluster.local:26379,sentinel-2.sentinel.default.svc.cluster.local:26379"
+    value: "sentinel-0.sentinel.redis.svc.cluster.local:26379,sentinel-1.sentinel.redis.svc.cluster.local:26379,sentinel-2.sentinel.redis.svc.cluster.local:26379"
   - name: REDIS_MASTER_NAME
     value: "myMaster"
 ```
@@ -97,7 +100,7 @@ env:
 To connect directly to the current master for debugging:
 
 ```bash
-kubectl exec -it redis-replication-0 -- redis-cli -a <password> PING
+kubectl exec -it redis-replication-0 -n redis -- redis-cli -a <password> PING
 ```
 
 ## Sizing
@@ -123,7 +126,7 @@ The operator creates headless services for DNS-based discovery:
 | `redis-replication` | 6379  | Redis (direct pod DNS, all replicas)  |
 | `sentinel`          | 26379 | Sentinel (master discovery, failover) |
 
-Individual pod DNS: `<pod-name>.<service-name>.default.svc.cluster.local`
+Individual pod DNS: `<pod-name>.<service-name>.redis.svc.cluster.local`
 
 ## Tear-down
 

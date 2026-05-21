@@ -15,7 +15,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: pg-cluster
-  namespace: default
+  namespace: postgres
 spec:
   instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie

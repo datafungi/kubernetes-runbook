@@ -9,7 +9,7 @@ apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: RedisSentinel
 metadata:
   name: sentinel
-  namespace: default
+  namespace: redis
 spec:
   clusterSize: 3
   podSecurityContext:

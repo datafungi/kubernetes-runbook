@@ -7,7 +7,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Pooler
 metadata:
   name: pg-cluster-pooler-rw
-  namespace: default
+  namespace: postgres
 spec:
   cluster:
     name: pg-cluster
@@ -25,7 +25,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Pooler
 metadata:
   name: pg-cluster-pooler-ro
-  namespace: default
+  namespace: postgres
 spec:
   cluster:
     name: pg-cluster
