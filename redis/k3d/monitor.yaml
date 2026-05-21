@@ -1,0 +1,46 @@
+# Prometheus monitors for Redis on k3d.
+#
+# Two resources:
+#   1. ServiceMonitor  — scrapes redis-exporter sidecars on the redis-replication pods (port 9121)
+#   2. PodMonitor      — scrapes OpsTree redis-operator controller metrics (port 8080)
+#
+# Prerequisite: redisExporter.enabled: true must be set in redis/k3d/replication.yaml
+# and the kube-prometheus-stack must be running (provides the CRDs).
+#
+# Apply:
+#   kubectl apply -f monitoring/k3d/redis-monitor.yaml
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-replication
+  namespace: redis
+spec:
+  selector:
+    matchLabels:
+      redis_setup_type: replication
+  namespaceSelector:
+    matchNames:
+      - redis
+  endpoints:
+    - port: redis-exporter
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: redis-operator
+  namespace: ot-operators
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      name: redis-operator
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      interval: 30s
+      scrapeTimeout: 10s

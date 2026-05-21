@@ -5,11 +5,12 @@ Managed by the OpsTree redis-operator.
 
 ## Files
 
-| File               | Purpose                                            |
-|--------------------|----------------------------------------------------|
-| `secret.yaml`      | Redis password secret (edit before applying)       |
-| `replication.yaml` | `RedisReplication` — 3-node master/replica group   |
-| `sentinel.yaml`    | `RedisSentinel` — 3 Sentinel instances, quorum = 2 |
+| File               | Purpose                                                                         |
+|--------------------|---------------------------------------------------------------------------------|
+| `secret.yaml`      | Redis password secret (edit before applying)                                    |
+| `replication.yaml` | `RedisReplication` — 3-node master/replica group                                |
+| `sentinel.yaml`    | `RedisSentinel` — 3 Sentinel instances, quorum = 2                              |
+| `monitor.yaml`     | `ServiceMonitor` + `PodMonitor` for Prometheus (requires kube-prometheus-stack) |
 
 ## Prerequisites
 
@@ -131,6 +132,7 @@ Individual pod DNS: `<pod-name>.<service-name>.redis.svc.cluster.local`
 ## Tear-down
 
 ```bash
+kubectl delete -f k3d/monitor.yaml   # if monitoring stack is deployed
 kubectl delete -f k3d/sentinel.yaml
 kubectl delete -f k3d/replication.yaml
 kubectl delete -f k3d/secret.yaml

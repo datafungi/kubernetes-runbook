@@ -1,0 +1,17 @@
+# PodMonitor for the pg-cluster PostgreSQL instances.
+# Prometheus scrapes the cnpg-postgres-exporter sidecar on each pod (port: metrics, 9187).
+#
+# Prerequisite: kube-prometheus-stack must be installed first (provides the PodMonitor CRD).
+# Apply after the monitoring stack is running:
+#   kubectl apply -f k3d/podmonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pg-cluster
+  namespace: postgres
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: pg-cluster
+  podMetricsEndpoints:
+    - port: metrics
