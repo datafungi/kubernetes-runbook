@@ -5,14 +5,16 @@ Managed by the OpsTree redis-operator.
 
 ## Files
 
-| File               | Purpose                                                                         |
-|--------------------|---------------------------------------------------------------------------------|
-| `secret.yaml`      | Redis password secret (edit before applying)                                    |
-| `replication.yaml` | `RedisReplication` — 3-node master/replica group                                |
-| `sentinel.yaml`    | `RedisSentinel` — 3 Sentinel instances, quorum = 2                              |
-| `monitor.yaml`     | `ServiceMonitor` + `PodMonitor` for Prometheus (requires kube-prometheus-stack) |
+| File                  | Purpose                                                                         |
+|-----------------------|---------------------------------------------------------------------------------|
+| `externalsecret.yaml` | `ExternalSecret` — syncs Redis password from OpenBao via ESO                    |
+| `replication.yaml`    | `RedisReplication` — 3-node master/replica group                                |
+| `sentinel.yaml`       | `RedisSentinel` — 3 Sentinel instances, quorum = 2                              |
+| `monitor.yaml`        | `ServiceMonitor` + `PodMonitor` for Prometheus (requires kube-prometheus-stack) |
 
 ## Prerequisites
+
+Deploy in this order: **OpenBao → ESO → OpsTree operator → Redis**
 
 Install the OpsTree redis-operator via Helm:
 
@@ -24,6 +26,12 @@ helm install redis-operator ot-helm/redis-operator \
 kubectl -n ot-operators rollout status deployment/redis-operator
 ```
 
+OpenBao and ESO must also be running. ESO syncs the Redis password from OpenBao into the `redis-secret` Kubernetes Secret, which the operator reads at startup. Store the password in OpenBao first (see [`openbao/k3d/README.md`](../../openbao/k3d/README.md)):
+
+```bash
+bao kv put secret/redis password="<your-redis-password>"
+```
+
 ## Deploy
 
 **Order matters** — Sentinel references the replication group by name and must be applied after the replication pods are Ready.
@@ -32,15 +40,17 @@ kubectl -n ot-operators rollout status deployment/redis-operator
 # 1. Create the namespace
 kubectl create namespace redis
 
-# 2. Set the password (edit secret.yaml first)
-kubectl apply -f k3d/secret.yaml
+# 2. Sync the Redis password from OpenBao via ESO
+kubectl apply -f redis/k3d/externalsecret.yaml
+# Wait for ESO to create the secret (usually a few seconds)
+kubectl get secret redis-secret -n redis
 
 # 3. Deploy the replication group and wait for all 3 pods
-kubectl apply -f k3d/replication.yaml
+kubectl apply -f redis/k3d/replication.yaml
 kubectl rollout status statefulset/redis-replication -n redis
 
 # 4. Deploy Sentinel
-kubectl apply -f k3d/sentinel.yaml
+kubectl apply -f redis/k3d/sentinel.yaml
 kubectl get redissentinel sentinel -n redis
 ```
 
@@ -56,7 +66,7 @@ kubectl exec -it sentinel-0 -n redis -- redis-cli -p 26379 SENTINEL masters
 
 ## Connect
 
-The password is stored in the secret you applied:
+The password is managed by ESO and available in the synced secret:
 
 ```bash
 kubectl get secret redis-secret -n redis -o jsonpath='{.data.password}' | base64 -d
@@ -132,10 +142,10 @@ Individual pod DNS: `<pod-name>.<service-name>.redis.svc.cluster.local`
 ## Tear-down
 
 ```bash
-kubectl delete -f k3d/monitor.yaml   # if monitoring stack is deployed
-kubectl delete -f k3d/sentinel.yaml
-kubectl delete -f k3d/replication.yaml
-kubectl delete -f k3d/secret.yaml
+kubectl delete -f redis/k3d/monitor.yaml   # if monitoring stack is deployed
+kubectl delete -f redis/k3d/sentinel.yaml
+kubectl delete -f redis/k3d/replication.yaml
+kubectl delete -f redis/k3d/externalsecret.yaml
 ```
 
 The `local-path` StorageClass uses `Delete` reclaim policy — PVCs and their data are removed automatically when the StatefulSet is deleted. No manual PVC cleanup is required.
