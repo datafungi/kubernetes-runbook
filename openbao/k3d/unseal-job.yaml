@@ -1,0 +1,50 @@
+# Apply this Job after any cluster restart to unseal OpenBao.
+# Prerequisite: create the openbao-unseal-keys Secret (see README).
+# The job is idempotent — it checks the seal status before acting.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-unseal
+  namespace: openbao
+spec:
+  ttlSecondsAfterFinished: 120
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: default
+      containers:
+        - name: unseal
+          # Update this tag to match your deployed OpenBao version.
+          image: quay.io/openbao/openbao:2.0.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              SEALED=$(bao status -format=json 2>/dev/null | grep '"sealed"' | grep -o 'true\|false' || echo "true")
+              if [ "$SEALED" = "false" ]; then
+                echo "OpenBao is already unsealed."
+                exit 0
+              fi
+              bao operator unseal "$UNSEAL_KEY"
+          env:
+            - name: BAO_ADDR
+              value: "http://openbao.openbao.svc.cluster.local:8200"
+            - name: UNSEAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-unseal-keys
+                  key: unseal-key
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,55 @@
+global:
+  enabled: true
+  tlsDisable: true
+
+server:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  # Override readiness probe so the pod becomes Ready while sealed/uninitialized.
+  # Without this, the probe returns 503 and the pod stays NotReady, blocking the unseal Job.
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+
+  livenessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true"
+    initialDelaySeconds: 60
+
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address     = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/openbao/data"
+      }
+
+  dataStorage:
+    enabled: true
+    size: 2Gi
+    storageClass: local-path
+    accessMode: ReadWriteOnce
+
+  auditStorage:
+    enabled: false
+
+ui:
+  enabled: true
+  serviceType: ClusterIP
+
+# Agent injector not used — External Secrets Operator handles secret sync.
+injector:
+  enabled: false
