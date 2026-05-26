@@ -1,0 +1,11 @@
+# Minimal ESO values for k3d local development.
+# Single replica; CRDs installed by Helm (default).
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
