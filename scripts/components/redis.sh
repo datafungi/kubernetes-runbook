@@ -53,6 +53,19 @@ install_redis() {
     || die "ESO did not sync 'redis-secret' within 60 s. Check: kubectl describe externalsecret redis-secret -n redis"
 
   # ── Static PVs ────────────────────────────────────────────────────────────
+  # Pre-create data directories with world-writable permissions before applying
+  # PVs. DirectoryOrCreate creates dirs as root (0755); the Redis pod user
+  # would then have no write access.
+  log_info "Creating Redis data directories with correct permissions..."
+  mkdir -p \
+    "${REPO_ROOT}/mnt/redis/redis-replication-0" \
+    "${REPO_ROOT}/mnt/redis/redis-replication-1" \
+    "${REPO_ROOT}/mnt/redis/redis-replication-2"
+  chmod 777 \
+    "${REPO_ROOT}/mnt/redis/redis-replication-0" \
+    "${REPO_ROOT}/mnt/redis/redis-replication-1" \
+    "${REPO_ROOT}/mnt/redis/redis-replication-2"
+
   log_info "Applying Redis PersistentVolumes..."
   kubectl apply -f "${REPO_ROOT}/redis/k3d/volumes.yaml"
 

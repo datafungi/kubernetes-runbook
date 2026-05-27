@@ -13,6 +13,13 @@ install_openbao() {
 
   create_namespace openbao
 
+  # Pre-create the data directory with world-writable permissions BEFORE
+  # applying the PV. If we let DirectoryOrCreate do it, kubelet creates the
+  # directory as root (0755) and the OpenBao pod (uid 100) cannot write to it.
+  log_info "Creating OpenBao data directory with correct permissions..."
+  mkdir -p "${REPO_ROOT}/mnt/openbao/data"
+  chmod 777 "${REPO_ROOT}/mnt/openbao/data"
+
   log_info "Applying OpenBao PersistentVolume..."
   kubectl apply -f "${REPO_ROOT}/openbao/k3d/volumes.yaml"
 
