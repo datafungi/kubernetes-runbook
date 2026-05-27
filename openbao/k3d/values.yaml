@@ -40,7 +40,7 @@ server:
   dataStorage:
     enabled: true
     size: 2Gi
-    storageClass: local-path
+    storageClass: local-retain
     accessMode: ReadWriteOnce
 
   auditStorage:

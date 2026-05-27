@@ -1,0 +1,25 @@
+# Static PersistentVolume for the OpenBao StatefulSet (k3d).
+#
+# Requires the local-retain StorageClass from setup/k3d/storage.yaml.
+# The PV is pre-bound via claimRef so only data-openbao-0 can claim it.
+# Data is stored under ./mnt/openbao/ on the host and persists across restarts.
+#
+# Apply before deploying OpenBao:
+#   kubectl apply -f openbao/k3d/volumes.yaml
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-data
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/openbao/data
+    type: DirectoryOrCreate
+  claimRef:
+    name: data-openbao-0
+    namespace: openbao
