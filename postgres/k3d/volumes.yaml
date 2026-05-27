@@ -1,0 +1,62 @@
+# Static PersistentVolumes for the CNPG pg-cluster StatefulSet (k3d).
+#
+# Requires the local-retain StorageClass from setup/k3d/storage.yaml.
+# Each PV is pre-bound via claimRef so only its matching PVC can claim it.
+# Data is stored under ./mnt/postgres/ on the host and persists across restarts.
+#
+# Apply before deploying cluster.yaml:
+#   kubectl apply -f postgres/k3d/volumes.yaml
+#
+# CNPG names PVCs as <cluster-name>-<instance-number>, so a 3-instance cluster
+# named 'pg-cluster' produces PVCs: pg-cluster-1, pg-cluster-2, pg-cluster-3.
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pg-cluster-1
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/postgres/pg-cluster-1
+    type: DirectoryOrCreate
+  claimRef:
+    name: pg-cluster-1
+    namespace: postgres
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pg-cluster-2
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/postgres/pg-cluster-2
+    type: DirectoryOrCreate
+  claimRef:
+    name: pg-cluster-2
+    namespace: postgres
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pg-cluster-3
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/postgres/pg-cluster-3
+    type: DirectoryOrCreate
+  claimRef:
+    name: pg-cluster-3
+    namespace: postgres

@@ -23,8 +23,21 @@ install_postgres() {
   # ── Cluster ────────────────────────────────────────────────────────────────
   create_namespace postgres
 
-  log_info "Applying StorageClass 'local-path-retain'..."
-  kubectl apply -f "${REPO_ROOT}/postgres/k3d/storageclass.yaml"
+  # Pre-create data directories with world-writable permissions before applying
+  # PVs. DirectoryOrCreate creates dirs as root (0755); the postgres pod user
+  # (uid 26) would then have no write access.
+  log_info "Creating PostgreSQL data directories with correct permissions..."
+  mkdir -p \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-1" \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-2" \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-3"
+  chmod 777 \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-1" \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-2" \
+    "${REPO_ROOT}/mnt/postgres/pg-cluster-3"
+
+  log_info "Applying PostgreSQL PersistentVolumes..."
+  kubectl apply -f "${REPO_ROOT}/postgres/k3d/volumes.yaml"
 
   log_info "Applying PostgreSQL cluster 'pg-cluster'..."
   kubectl apply -f "${REPO_ROOT}/postgres/k3d/cluster.yaml"
@@ -54,10 +67,10 @@ install_postgres() {
 teardown_postgres() {
   log_step "Tearing down PostgreSQL"
 
-  kubectl delete -f "${REPO_ROOT}/postgres/k3d/pooler.yaml"  2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/postgres/k3d/cluster.yaml" 2>/dev/null || true
+  kubectl delete -f "${REPO_ROOT}/postgres/k3d/pooler.yaml"   2>/dev/null || true
+  kubectl delete -f "${REPO_ROOT}/postgres/k3d/cluster.yaml"  2>/dev/null || true
 
-  # Wait for pods to terminate before deleting the namespace
+  # Wait for pods to terminate before deleting the namespace and PVs
   log_info "Waiting for PostgreSQL pods to terminate..."
   kubectl wait pods --all -n postgres \
     --for=delete --timeout=120s 2>/dev/null || true
@@ -65,6 +78,9 @@ teardown_postgres() {
   kubectl delete namespace postgres 2>/dev/null \
     && log_info "Namespace 'postgres' removed" \
     || log_warn "Namespace 'postgres' not found — skipping"
+
+  # Delete static PVs after namespace is gone (PVs are cluster-scoped)
+  kubectl delete -f "${REPO_ROOT}/postgres/k3d/volumes.yaml" 2>/dev/null || true
 
   helm uninstall cnpg -n cnpg-system 2>/dev/null \
     && log_info "CNPG operator removed" \

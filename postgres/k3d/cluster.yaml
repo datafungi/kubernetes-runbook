@@ -23,7 +23,7 @@ spec:
 
   storage:
     size: 2Gi
-    storageClass: local-path-retain
+    storageClass: local-retain
 
   postgresql:
     parameters:
