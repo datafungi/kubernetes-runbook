@@ -46,9 +46,15 @@ config:
   core:
     load_examples: 'False'
   celery:
-    # Required for CeleryExecutor with Redis Sentinel:
-    # tells Kombu/Celery which Sentinel master group to follow.
-    broker_transport_options: '{"master_name": "myMaster"}'
+    # Reduce from default 16 to 2 for local dev — each prefork child loads
+    # the full Airflow+Python environment (~150-200 MB), so 16 workers
+    # alone exceed any reasonable local memory limit.
+    worker_concurrency: '2'
+  # Airflow reads broker transport options from [celery_broker_transport_options]
+  # (a separate INI section), NOT from [celery] broker_transport_options.
+  # See: airflow/providers/celery/executors/default_celery.py → getsection()
+  celery_broker_transport_options:
+    master_name: myMaster
 
 # ── Logs: persistent volume ───────────────────────────────────────────────────
 # The PVC is created by logs-storage.yaml (hostPath, ReadWriteMany).
@@ -102,10 +108,15 @@ workers:
   celery:
     logGroomerSidecar:
       enabled: false
+    # 2 prefork workers is sufficient for local dev and avoids OOMKill.
+    # Default is 16; each fork loads the full Python+Airflow environment
+    # (~150-200 MB each), which blows past any reasonable local memory limit.
+    livenessProbe:
+      initialDelaySeconds: 60   # default 10 s fires during prefork startup spike
     resources:
       requests:
         cpu: "500m"
-        memory: "768Mi"
+        memory: "512Mi"
       limits:
         cpu: "1"
         memory: "2Gi"
