@@ -50,7 +50,7 @@ spec:
   storage:
     volumeClaimTemplate:
       spec:
-        storageClassName: local-path
+        storageClassName: local-retain
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:

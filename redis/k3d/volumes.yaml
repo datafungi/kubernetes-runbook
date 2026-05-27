@@ -1,0 +1,59 @@
+# Static PersistentVolumes for the Redis replication StatefulSet (k3d).
+#
+# Requires the local-retain StorageClass from setup/k3d/storage.yaml.
+# Each PV is pre-bound via claimRef so only its matching PVC can claim it.
+# Data is stored under ./mnt/redis/ on the host and persists across restarts.
+#
+# Apply before deploying replication.yaml:
+#   kubectl apply -f redis/k3d/volumes.yaml
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-replication-0
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/redis/redis-replication-0
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-replication-redis-replication-0
+    namespace: redis
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-replication-1
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/redis/redis-replication-1
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-replication-redis-replication-1
+    namespace: redis
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-replication-2
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/redis/redis-replication-2
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-replication-redis-replication-2
+    namespace: redis
