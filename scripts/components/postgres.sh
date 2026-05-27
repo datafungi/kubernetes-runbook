@@ -5,6 +5,13 @@ install_postgres() {
   log_step "Installing PostgreSQL (CloudNativePG)"
   require_commands helm kubectl
 
+  # ── Prerequisite checks ────────────────────────────────────────────────────
+  # OpenBao must be unsealed so the unseal-keys Secret exists (used by other
+  # components later); postgres itself does not use ESO but sits in the same
+  # dependency chain.
+  kubectl get secret openbao-unseal-keys -n openbao >/dev/null 2>&1 \
+    || die "OpenBao does not appear to be initialized. Run: install.sh install openbao"
+
   # ── CNPG operator ──────────────────────────────────────────────────────────
   log_info "Installing CloudNativePG operator..."
   helm_repo_add cnpg https://cloudnative-pg.github.io/charts

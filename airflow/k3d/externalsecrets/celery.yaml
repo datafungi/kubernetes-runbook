@@ -15,7 +15,7 @@ spec:
     name: airflow-celery
     template:
       data:
-        broker-url: "sentinel://:{{ .redisPassword }}@sentinel-0.sentinel.redis.svc.cluster.local:26379;sentinel-1.sentinel.redis.svc.cluster.local:26379;sentinel-2.sentinel.redis.svc.cluster.local:26379/0"
+        broker-url: "sentinel://:{{ .redisPassword }}@sentinel-sentinel-0.sentinel-sentinel-headless.redis.svc.cluster.local:26379;sentinel-sentinel-1.sentinel-sentinel-headless.redis.svc.cluster.local:26379;sentinel-sentinel-2.sentinel-sentinel-headless.redis.svc.cluster.local:26379/0"
   data:
     - secretKey: redisPassword
       remoteRef:

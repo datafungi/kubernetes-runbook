@@ -8,6 +8,13 @@ install_redis() {
   log_step "Installing Redis (OpsTree Sentinel cluster)"
   require_commands helm kubectl bao openssl
 
+  # ── Prerequisite checks ────────────────────────────────────────────────────
+  local css_reason
+  css_reason=$(kubectl get clustersecretstore openbao \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' 2>/dev/null || true)
+  [[ "$css_reason" == "Valid" ]] \
+    || die "ClusterSecretStore 'openbao' is not Valid (got: '${css_reason:-not found}'). Run: install.sh install eso"
+
   # ── OpsTree redis-operator ─────────────────────────────────────────────────
   log_info "Installing OpsTree redis-operator..."
   helm_repo_add ot-helm https://ot-container-kit.github.io/helm-charts/
@@ -80,8 +87,10 @@ install_redis() {
   log_info "Applying RedisSentinel 'sentinel'..."
   kubectl apply -f "${REPO_ROOT}/redis/k3d/sentinel.yaml"
 
-  log_info "Waiting for StatefulSet 'sentinel' to be Ready..."
-  wait_for_rollout statefulset sentinel redis 120s
+  # The OpsTree operator names the StatefulSet <cr-name>-sentinel, so a
+  # RedisSentinel CR named 'sentinel' creates StatefulSet 'sentinel-sentinel'.
+  log_info "Waiting for StatefulSet 'sentinel-sentinel' to be Ready..."
+  wait_for_rollout statefulset sentinel-sentinel redis 120s
 
   log_info "Redis Sentinel cluster ready."
 }

@@ -86,10 +86,14 @@ Apps connect to Sentinel on port `26379`. Sentinel returns the current master ad
 Sentinel service DNS:
 
 ```
-sentinel-0.sentinel.redis.svc.cluster.local:26379
-sentinel-1.sentinel.redis.svc.cluster.local:26379
-sentinel-2.sentinel.redis.svc.cluster.local:26379
+sentinel-sentinel-0.sentinel-sentinel-headless.redis.svc.cluster.local:26379
+sentinel-sentinel-1.sentinel-sentinel-headless.redis.svc.cluster.local:26379
+sentinel-sentinel-2.sentinel-sentinel-headless.redis.svc.cluster.local:26379
 ```
+
+The OpsTree operator appends `-sentinel` to the CR name for the StatefulSet and
+services, so a `RedisSentinel` CR named `sentinel` produces a StatefulSet and
+headless service both named `sentinel-sentinel`.
 
 Reference in your application (Python `redis-py` example):
 
@@ -101,7 +105,7 @@ env:
         name: redis-secret
         key: password
   - name: REDIS_SENTINEL_HOSTS
-    value: "sentinel-0.sentinel.redis.svc.cluster.local:26379,sentinel-1.sentinel.redis.svc.cluster.local:26379,sentinel-2.sentinel.redis.svc.cluster.local:26379"
+    value: "sentinel-sentinel-0.sentinel-sentinel-headless.redis.svc.cluster.local:26379,sentinel-sentinel-1.sentinel-sentinel-headless.redis.svc.cluster.local:26379,sentinel-sentinel-2.sentinel-sentinel-headless.redis.svc.cluster.local:26379"
   - name: REDIS_MASTER_NAME
     value: "myMaster"
 ```

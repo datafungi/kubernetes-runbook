@@ -53,7 +53,7 @@ OpenBao
   secret/airflow/git            → airflow-ssh-secret    (ESO)  key: gitSshKey  ← gitsync only
 
 PostgreSQL: pg-cluster-rw.postgres.svc.cluster.local:5432 (CNPG direct primary)
-Redis:      sentinel-{0,1,2}.sentinel.redis.svc.cluster.local:26379 (OpsTree Sentinel)
+Redis:      sentinel-sentinel-{0,1,2}.sentinel-sentinel-headless.redis.svc.cluster.local:26379
 DAGs:       gitsync → /opt/airflow/dags → LocalDagBundle
             local   → hostPath PVC (mnt/airflow/dags/) → /opt/airflow/dags
 Logs:       hostPath PVC (mnt/airflow/logs/, RWX, 5 Gi)
