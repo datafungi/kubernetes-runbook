@@ -1,0 +1,19 @@
+# Fernet key — encrypts passwords and connection strings in the Airflow
+# metadata database. chart field: fernetKeySecretName (key: fernet-key)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-fernet-key
+  namespace: airflow
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: airflow-fernet-key
+  data:
+    - secretKey: fernet-key
+      remoteRef:
+        key: airflow/fernet-key
+        property: fernet-key

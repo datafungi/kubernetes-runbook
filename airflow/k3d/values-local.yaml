@@ -1,0 +1,14 @@
+# DAG overlay — local path mode
+# Merged on top of values.yaml: -f values.yaml -f values-local.yaml
+#
+# DAG files are served from a hostPath PVC backed by mnt/airflow/dags/ on the
+# host. Drop .py files into that directory; dag-processor picks them up on the
+# next scan cycle without requiring a git push or pod restart.
+#
+# The PVC is created by dags-storage.yaml. The install script creates
+# mnt/airflow/dags/ and applies that manifest before running helm install.
+
+dags:
+  persistence:
+    enabled: true
+    existingClaim: airflow-dags

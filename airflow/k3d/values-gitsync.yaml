@@ -1,0 +1,15 @@
+# DAG overlay — GitSync mode
+# Merged on top of values.yaml: -f values.yaml -f values-gitsync.yaml
+#
+# Dynamic parameters (repo, branch, subPath, knownHosts) are injected by
+# the install script via --set / -f <generated-known-hosts.yaml> at install
+# time and do not appear in this file.
+#
+# The git-sync sidecar is injected into dag-processor and worker pods by the
+# chart. It clones the repo into /opt/airflow/dags, which the dagProcessor
+# reads via LocalDagBundle (the chart's default dagBundleConfigList entry).
+
+dags:
+  gitSync:
+    enabled: true
+    sshKeySecret: airflow-ssh-secret   # ESO-managed: externalsecrets/git.yaml

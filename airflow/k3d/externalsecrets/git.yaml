@@ -1,0 +1,21 @@
+# Git SSH deploy key for the GitSync sidecar.
+# Applied only in gitsync DAG mode (skipped for local mode).
+# The chart's dags.gitSync mounts this secret into dag-processor and worker pods.
+# Key name gitSshKey is required by the git-sync container.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-ssh-secret
+  namespace: airflow
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: airflow-ssh-secret
+  data:
+    - secretKey: gitSshKey
+      remoteRef:
+        key: airflow/git
+        property: private-key

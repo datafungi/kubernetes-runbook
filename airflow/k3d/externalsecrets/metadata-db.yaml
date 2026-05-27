@@ -1,0 +1,31 @@
+# Metadata DB connection strings — built from stored credentials via ESO template.
+#   connection     → SQLAlchemy URI  (AIRFLOW__DATABASE__SQL_ALCHEMY_CONN)
+#   result-backend → Celery result backend (db+postgresql://)
+#
+# Connects directly to the CNPG primary (pg-cluster-rw) to avoid advisory-lock
+# and session-state restrictions imposed by PgBouncer transaction mode.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-metadata-db
+  namespace: airflow
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: airflow-metadata-db
+    template:
+      data:
+        connection: "postgresql+psycopg2://{{ .user }}:{{ .password }}@pg-cluster-rw.postgres.svc.cluster.local:5432/airflow"
+        result-backend: "db+postgresql://{{ .user }}:{{ .password }}@pg-cluster-rw.postgres.svc.cluster.local:5432/airflow"
+  data:
+    - secretKey: user
+      remoteRef:
+        key: airflow/metadata-db
+        property: user
+    - secretKey: password
+      remoteRef:
+        key: airflow/metadata-db
+        property: password

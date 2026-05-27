@@ -1,0 +1,47 @@
+# Airflow DAG storage — k3d (local DAG mode only)
+#
+# Used when AIRFLOW_DAGS_MODE=local. DAG files are placed directly in
+# mnt/airflow/dags/ on the host; they become immediately visible to
+# dag-processor and worker pods without a git clone step.
+#
+# setup/k3d/config.yaml mounts mnt/ into every node at
+# /var/lib/rancher/k3s/storage, so the hostPath PV is accessible from any
+# pod on any node — ReadWriteMany without requiring an NFS server.
+#
+# On the host, DAG files live at:
+#   <repo-root>/mnt/airflow/dags/
+#
+# The install script creates mnt/airflow/dags/ before applying this manifest.
+# DirectoryOrCreate is a safety net in case the directory is missing.
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: airflow-dags
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/airflow/dags
+    type: DirectoryOrCreate
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: airflow
+    name: airflow-dags
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-dags
+  namespace: airflow
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ""
+  volumeName: airflow-dags

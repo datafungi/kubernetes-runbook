@@ -1,30 +1,45 @@
 # Apache Airflow — k3d (Local Development)
 
 CeleryExecutor deployment using the official Apache Airflow Helm chart (v1.21.0, Airflow 3.2.0).
-DAGs are loaded via GitSync sidecar (SSH, no PVC). Logs are persisted to a shared hostPath PVC.
+DAGs are loaded via GitSync sidecar (SSH) **or** a local hostPath volume (no git required).
+Logs are persisted to a shared hostPath PVC.
 All secrets are stored in OpenBao and synchronized into the cluster by ESO.
 
 ## Files
 
-| File                   | Purpose                                                                   |
-|------------------------|---------------------------------------------------------------------------|
-| `values.yaml`          | Helm values: CeleryExecutor, GitSync, log PVC, resource limits            |
-| `externalsecrets.yaml` | ESO ExternalSecrets: six secrets synced from OpenBao                      |
-| `logs-storage.yaml`    | PersistentVolume + PersistentVolumeClaim for Airflow logs (hostPath, RWX) |
+| Path | Purpose |
+|------|---------|
+| `values.yaml` | Helm base values: CeleryExecutor, secrets refs, resource limits, log PVC |
+| `values-gitsync.yaml` | DAG overlay: git-sync sidecar (SSH) |
+| `values-local.yaml` | DAG overlay: hostPath PVC (`mnt/airflow/dags/`) |
+| `externalsecrets/fernet-key.yaml` | ESO: fernet key |
+| `externalsecrets/api-secret.yaml` | ESO: API server session key |
+| `externalsecrets/jwt-secret.yaml` | ESO: JWT signing key |
+| `externalsecrets/metadata-db.yaml` | ESO: PostgreSQL connection strings (templated) |
+| `externalsecrets/celery.yaml` | ESO: Redis Sentinel broker URL (templated) |
+| `externalsecrets/git.yaml` | ESO: git SSH deploy key (gitsync mode only) |
+| `logs-storage.yaml` | PV + PVC for Airflow logs (`mnt/airflow/logs/`, RWX) |
+| `dags-storage.yaml` | PV + PVC for DAGs in local mode (`mnt/airflow/dags/`, RWX) |
 
 ## Architecture
 
 ### Components (Airflow 3.x)
 
-Airflow 3.x restructured the component layout from 2.x:
+| Component | Airflow 2.x | Airflow 3.x | Description |
+|-----------|-------------|-------------|-------------|
+| API / UI server | `webserver` | `apiServer` | Runs `airflow api-server`, port 8080 |
+| DAG parsing | in scheduler | `dagProcessor` | Runs `airflow dag-processor` (new) |
+| Scheduler | `scheduler` | `scheduler` | Schedules DAG runs (no longer parses) |
+| Workers | `worker` | `worker` | Executes Celery tasks |
+| Triggerer | `triggerer` | `triggerer` | Handles deferred operators |
 
-| Component       | Airflow 2.x  | Airflow 3.x    | Description                           |
-|-----------------|--------------|----------------|---------------------------------------|
-| API / UI server | `webserver`  | `apiServer`    | Runs `airflow api-server`, port 8080  |
-| DAG parsing     | in scheduler | `dagProcessor` | Runs `airflow dag-processor` (new)    |
-| Scheduler       | `scheduler`  | `scheduler`    | Schedules DAG runs (no longer parses) |
-| Workers         | `worker`     | `worker`       | Executes Celery tasks                 |
-| Triggerer       | `triggerer`  | `triggerer`    | Handles deferred operators            |
+### DAG loading modes
+
+**`local`** — Place `.py` files in `mnt/airflow/dags/` on the host. The dag-processor picks
+them up on the next scan cycle. No git credentials required.
+
+**`gitsync`** — The git-sync sidecar clones your DAG repository into `/opt/airflow/dags/`
+inside the dag-processor and worker pods. Requires an SSH deploy key.
 
 ### Secrets flow
 
@@ -35,40 +50,67 @@ OpenBao
   secret/airflow/api            → airflow-jwt-secret    (ESO)  key: jwt-secret
   secret/airflow/metadata-db    → airflow-metadata-db   (ESO, templated URI)
   secret/redis                  → airflow-celery        (ESO, templated Sentinel URL)
-  secret/airflow/git            → airflow-ssh-secret    (ESO)  key: gitSshKey
+  secret/airflow/git            → airflow-ssh-secret    (ESO)  key: gitSshKey  ← gitsync only
 
 PostgreSQL: pg-cluster-rw.postgres.svc.cluster.local:5432 (CNPG direct primary)
 Redis:      sentinel-{0,1,2}.sentinel.redis.svc.cluster.local:26379 (OpsTree Sentinel)
-DAGs:       GitSync sidecar → /opt/airflow/dags → dag-processor LocalDagBundle
-Logs:       hostPath PVC (ReadWriteMany, 5 Gi) — mnt/airflow/ → /var/lib/rancher/k3s/storage/airflow
+DAGs:       gitsync → /opt/airflow/dags → LocalDagBundle
+            local   → hostPath PVC (mnt/airflow/dags/) → /opt/airflow/dags
+Logs:       hostPath PVC (mnt/airflow/logs/, RWX, 5 Gi)
 ```
 
 ## Prerequisites
 
 Deploy in this order: **OpenBao → ESO → PostgreSQL → Redis → Airflow**
 
-All of the following must already be running:
-
-- OpenBao (initialized and unsealed) — `openbao/k3d/`
-- External Secrets Operator with `ClusterSecretStore openbao` — `external-secrets-operator/k3d/`
-- PostgreSQL CNPG cluster `pg-cluster` in namespace `postgres` — `postgres/k3d/`
-- Redis Sentinel cluster in namespace `redis` — `redis/k3d/`
-
-Add the official Apache Airflow Helm repo:
+Or use the install script:
 
 ```bash
-helm repo add apache-airflow https://airflow.apache.org
-helm repo update
-helm search repo apache-airflow/airflow --versions | head -5
+./scripts/install.sh install all
 ```
 
-## 1 — Prepare PostgreSQL
-
-Connect to the PostgreSQL primary and create a dedicated Airflow database and user. Use the CNPG superuser credentials:
+## Installation (install script — recommended)
 
 ```bash
-# Open a psql session via the primary pod
-kubectl exec -it pg-cluster-1 -n postgres -- psql -U postgres
+# Full stack
+./scripts/install.sh install all
+
+# Airflow only (prereqs must already be running)
+./scripts/install.sh install airflow
+```
+
+The script handles all of the following automatically:
+
+- PostgreSQL database and user creation
+- Secret generation (fernet key, API secret, JWT secret) and storage in OpenBao
+- SSH key upload to OpenBao (gitsync mode)
+- Helm install with the correct values overlay
+
+DAG mode and gitsync parameters can be set via environment variables or entered interactively:
+
+```bash
+# Non-interactive gitsync example
+AIRFLOW_DAGS_MODE=gitsync \
+AIRFLOW_DAGS_REPO=git@github.com:org/dags.git \
+AIRFLOW_GIT_SSH_KEY_FILE=~/.ssh/dags-deploy-key \
+  ./scripts/install.sh install airflow
+
+# Non-interactive local example
+AIRFLOW_DAGS_MODE=local ./scripts/install.sh install airflow
+```
+
+## Manual installation
+
+### 1 — Prepare PostgreSQL
+
+Connect to the PostgreSQL primary and create a dedicated Airflow database and user:
+
+```bash
+# Detect the primary pod dynamically
+PRIMARY=$(kubectl get pod -n postgres -l cnpg.io/instanceRole=primary \
+  -o jsonpath='{.items[0].metadata.name}')
+
+kubectl exec -it "$PRIMARY" -n postgres -- psql -U postgres
 ```
 
 Inside psql:
@@ -79,7 +121,7 @@ CREATE DATABASE airflow OWNER airflow;
 \q
 ```
 
-## 2 — Store Secrets in OpenBao
+### 2 — Store secrets in OpenBao
 
 Port-forward OpenBao and authenticate:
 
@@ -91,169 +133,107 @@ export BAO_TOKEN=$(kubectl get secret openbao-unseal-keys -n openbao \
   -o jsonpath='{.data.root-token}' | base64 -d)
 ```
 
-### Fernet key
-
-Encrypts passwords and connection strings in the Airflow metadata database:
-
 ```bash
+# Fernet key
 FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+bao kv put secret/airflow/fernet-key fernet-key="$FERNET_KEY"
 
-bao kv put secret/airflow/fernet-key \
-  fernet-key="$FERNET_KEY"
-```
-
-### API server and JWT secrets (Airflow 3.x)
-
-The Airflow 3 API server needs two separate secrets:
-- **api-secret-key** — Flask/ASGI session signing (`[api] secret_key`)
-- **jwt-secret** — JWT token signing for API authentication (`[api_auth] jwt_secret`)
-
-```bash
+# API server + JWT secrets (Airflow 3.x)
 API_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+bao kv put secret/airflow/api api-secret-key="$API_SECRET" jwt-secret="$JWT_SECRET"
 
-bao kv put secret/airflow/api \
-  api-secret-key="$API_SECRET" \
-  jwt-secret="$JWT_SECRET"
+# Metadata DB credentials (use password from step 1)
+bao kv put secret/airflow/metadata-db user="airflow" password="<your-airflow-db-password>"
+
+# Git SSH key (gitsync mode only)
+bao kv put secret/airflow/git private-key=@~/.ssh/your-dags-deploy-key
+
+kill %1   # stop port-forward
 ```
 
-### Airflow metadata database credentials
-
-Use the password you chose in step 1:
+### 3 — Apply manifests and install
 
 ```bash
-bao kv put secret/airflow/metadata-db \
-  user="airflow" \
-  password="<your-airflow-db-password>"
-```
-
-### Git SSH key (for GitSync)
-
-Store the private key that has read access to your DAGs repository:
-
-```bash
-bao kv put secret/airflow/git \
-  private-key="$(cat ~/.ssh/your-dags-deploy-key)"
-```
-
-The corresponding public key must be added as a deploy key in your Git repository settings (read-only access is sufficient).
-
-Kill the port-forward when done:
-
-```bash
-kill %1
-```
-
-## 3 — Configure values.yaml
-
-Edit `airflow/k3d/values.yaml` and set your DAG repository URL:
-
-```yaml
-dags:
-  gitSync:
-    repo: "git@github.com:<your-org>/<your-dags-repo>.git"
-    branch: "main"
-```
-
-If your DAGs live in a subdirectory (e.g. `dags/`), set `subPath: "dags"`.
-
-Update `knownHosts` if your Git provider is not GitHub:
-
-```bash
-ssh-keyscan gitlab.com    # or your host
-```
-
-Replace the `knownHosts` block in `values.yaml` with the output.
-
-## 4 — Deploy
-
-```bash
-# Create the namespace
 kubectl create namespace airflow
 
-# Create the log PersistentVolume and PVC (hostPath, shared across all k3d nodes)
-# The directory /tmp/k3d-storage/airflow-logs/ is created automatically on first use.
+# Storage
+mkdir -p mnt/airflow/logs mnt/airflow/dags
 kubectl apply -f airflow/k3d/logs-storage.yaml
-kubectl get pvc airflow-logs -n airflow
-# STATUS should be Bound
+# local mode only:
+kubectl apply -f airflow/k3d/dags-storage.yaml
 
-# Apply ExternalSecrets (ESO will sync secrets from OpenBao)
-kubectl apply -f airflow/k3d/externalsecrets.yaml
+# ExternalSecrets
+kubectl apply -f airflow/k3d/externalsecrets/fernet-key.yaml
+kubectl apply -f airflow/k3d/externalsecrets/api-secret.yaml
+kubectl apply -f airflow/k3d/externalsecrets/jwt-secret.yaml
+kubectl apply -f airflow/k3d/externalsecrets/metadata-db.yaml
+kubectl apply -f airflow/k3d/externalsecrets/celery.yaml
+# gitsync mode only:
+kubectl apply -f airflow/k3d/externalsecrets/git.yaml
 
-# Wait for all six secrets to be synced
-kubectl get externalsecrets -n airflow
-# All should show STATUS=SecretSynced
+kubectl get externalsecrets -n airflow   # all should show SecretSynced
 
-# Install Airflow
+# Helm install — pick the correct overlay
 helm install airflow apache-airflow/airflow \
   --namespace airflow \
   --version 1.21.0 \
   -f airflow/k3d/values.yaml \
+  -f airflow/k3d/values-local.yaml \   # or values-gitsync.yaml
   --timeout 10m
+
+# gitsync: also pass repo/branch/knownHosts via --set / -f
 ```
 
-Watch the rollout:
+## Verify
 
 ```bash
-kubectl get pods -n airflow -w
-```
-
-The chart runs a `db-migrations` job first, then a `create-user` job. Both must complete before the scheduler, api-server, dag-processor, workers, and triggerer become Ready.
-
-## 5 — Verify
-
-```bash
-# All Airflow pods should be Running or Completed
 kubectl get pods -n airflow
 
-# Check dag-processor is parsing DAGs from the gitSync volume
+# dag-processor should be parsing DAGs
 kubectl logs deployment/airflow-dag-processor -n airflow | tail -20
 
-# Check the git-sync sidecar in the dag-processor pod
+# gitsync: check the git-sync sidecar
 kubectl logs deployment/airflow-dag-processor -n airflow -c git-sync | tail -10
 
-# Check scheduler is scheduling runs
-kubectl logs deployment/airflow-scheduler -n airflow | tail -20
-
-# Confirm Celery workers are connected to the broker
+# Workers connected to broker
 kubectl exec -it deployment/airflow-worker -n airflow -- \
   airflow celery inspect active
 ```
 
-## 6 — Access the UI
-
-The Airflow 3 UI is served by the API server (not the webserver):
+## Access the UI
 
 ```bash
 kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
 ```
 
-Open http://localhost:8080.
-
-Default credentials are set by the Helm chart's `create-user` job. Check the job logs if you did not set a password explicitly:
+Open http://localhost:8080. Default credentials are set by the `create-user` job:
 
 ```bash
 kubectl logs job/airflow-create-user -n airflow
 ```
 
-## Log Storage
+## Log and DAG storage
 
-Logs are stored in a `hostPath` PersistentVolume defined in `logs-storage.yaml`.
+| Host path | In-cluster path | Used by |
+|-----------|-----------------|---------|
+| `mnt/airflow/logs/` | `/var/lib/rancher/k3s/storage/airflow/logs/` | logs PV |
+| `mnt/airflow/dags/` | `/var/lib/rancher/k3s/storage/airflow/dags/` | DAGs PV (local mode) |
 
-`setup/k3d/config.yaml` mounts the repo's `mnt/` directory into every k3d node container at `/var/lib/rancher/k3s/storage`. The Airflow log PV uses the path `/var/lib/rancher/k3s/storage/airflow` inside the container, which resolves to `mnt/airflow/` on the host. Because all agent nodes share the same underlying host directory, the PVC uses `ReadWriteMany` — any Airflow pod on any node writes to the same location without needing an NFS server.
+Both paths are bind-mounted into every k3d node via `setup/k3d/config.yaml`, making the
+hostPath PVs accessible from any pod on any node as ReadWriteMany.
 
-**Prerequisite:** the k3d cluster must be created (or recreated) with the updated `config.yaml` that includes the `mnt/airflow` volume mount. If your cluster is already running without this mount, recreate it:
+## Sizing
 
-```bash
-k3d cluster delete simple-cluster
-k3d cluster create --config setup/k3d/config.yaml
-```
-
-To inspect logs on the host:
-
-```bash
-ls mnt/airflow/
-```
+| Component | CPU request/limit | Memory request/limit |
+|-----------|-------------------|----------------------|
+| API Server | `250m` / `500m` | `512Mi` / `1Gi` |
+| DAG Processor | `250m` / `500m` | `256Mi` / `512Mi` |
+| Scheduler | `500m` / `1` | `512Mi` / `1Gi` |
+| Worker | `500m` / `1` | `512Mi` / `1Gi` |
+| Triggerer | `100m` / `500m` | `256Mi` / `512Mi` |
+| Logs PVC | — | 5 Gi (hostPath, RWX) |
+| DAGs PVC | — | 1 Gi (hostPath, RWX, local mode) |
 
 ## Upgrade
 
@@ -261,49 +241,35 @@ ls mnt/airflow/
 helm upgrade airflow apache-airflow/airflow \
   --namespace airflow \
   --version 1.21.0 \
-  -f airflow/k3d/values.yaml
+  -f airflow/k3d/values.yaml \
+  -f airflow/k3d/values-<mode>.yaml
 ```
-
-Helm runs the `db-migrations` job automatically on upgrade.
-
-## Sizing
-
-| Component     | CPU request/limit | Memory request/limit |
-|---------------|-------------------|----------------------|
-| API Server    | `250m` / `500m`   | `512Mi` / `1Gi`      |
-| DAG Processor | `250m` / `500m`   | `256Mi` / `512Mi`    |
-| Scheduler     | `500m` / `1`      | `512Mi` / `1Gi`      |
-| Worker        | `500m` / `1`      | `512Mi` / `1Gi`      |
-| Triggerer     | `100m` / `500m`   | `256Mi` / `512Mi`    |
-| Log PVC       | —                 | 5 Gi (hostPath, RWX) |
 
 ## Tear-down
 
 ```bash
+./scripts/install.sh teardown airflow
+```
+
+Or manually:
+
+```bash
 helm uninstall airflow -n airflow
-kubectl delete -f airflow/k3d/externalsecrets.yaml
+kubectl delete -f airflow/k3d/externalsecrets/
 kubectl delete -f airflow/k3d/logs-storage.yaml
+kubectl delete -f airflow/k3d/dags-storage.yaml
 kubectl delete namespace airflow
-```
 
-Secrets created by ESO are deleted with the namespace. The log PV uses `Retain` reclaim policy — the data at `/tmp/k3d-storage/airflow-logs` is kept after teardown. Delete it manually if no longer needed:
-
-```bash
-rm -rf /tmp/k3d-storage/airflow-logs
-```
-
-OpenBao secrets are **not** deleted automatically. To remove them:
-
-```bash
+# OpenBao secrets (irreversible)
 bao kv delete secret/airflow/fernet-key
 bao kv delete secret/airflow/api
 bao kv delete secret/airflow/metadata-db
 bao kv delete secret/airflow/git
+
+# PostgreSQL (irreversible)
+# kubectl exec into primary pod, then:
+# DROP DATABASE airflow; DROP USER airflow;
 ```
 
-The PostgreSQL database and user must be dropped manually if no longer needed:
-
-```sql
-DROP DATABASE airflow;
-DROP USER airflow;
-```
+Log and DAG data in `mnt/airflow/` is preserved after teardown (Retain policy).
+Delete manually if no longer needed: `rm -rf mnt/airflow/`

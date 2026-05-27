@@ -1,0 +1,23 @@
+# Celery broker URL — Sentinel scheme, built from the existing Redis password.
+# The non-sensitive master_name is set via config.AIRFLOW__CELERY__BROKER_TRANSPORT_OPTIONS
+# in values.yaml (rendered into a ConfigMap, not a Secret).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-celery
+  namespace: airflow
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: airflow-celery
+    template:
+      data:
+        broker-url: "sentinel://:{{ .redisPassword }}@sentinel-0.sentinel.redis.svc.cluster.local:26379;sentinel-1.sentinel.redis.svc.cluster.local:26379;sentinel-2.sentinel.redis.svc.cluster.local:26379/0"
+  data:
+    - secretKey: redisPassword
+      remoteRef:
+        key: redis
+        property: password

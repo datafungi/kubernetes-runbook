@@ -3,19 +3,14 @@
 # setup/k3d/config.yaml mounts the repo's mnt/ directory into every k3d
 # node container at /var/lib/rancher/k3s/storage. Because all agent nodes
 # share the same underlying host directory, the hostPath PV at
-# /var/lib/rancher/k3s/storage/airflow is accessible from any pod on any
-# node — ReadWriteMany without requiring an NFS server.
+# /var/lib/rancher/k3s/storage/airflow/logs is accessible from any pod on
+# any node — ReadWriteMany without requiring an NFS server.
 #
 # On the host, logs appear at:
-#   <repo-root>/mnt/airflow/
+#   <repo-root>/mnt/airflow/logs/
 #
-# Prerequisite: the k3d cluster must be (re)created with the updated
-# config.yaml that includes the mnt/airflow volume mount.
-#
-# Deploy order:
-#   kubectl create namespace airflow   (if not already done)
-#   kubectl apply -f airflow/k3d/logs-storage.yaml
-#   # then helm install ...
+# The install script creates mnt/airflow/logs/ before applying this manifest.
+# DirectoryOrCreate is a safety net in case the directory is missing.
 
 apiVersion: v1
 kind: PersistentVolume
@@ -27,11 +22,10 @@ spec:
   accessModes:
     - ReadWriteMany
   hostPath:
-    path: /var/lib/rancher/k3s/storage/airflow
-    type: Directory
+    path: /var/lib/rancher/k3s/storage/airflow/logs
+    type: DirectoryOrCreate
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
-  # Pre-bind to the airflow namespace PVC so no other claim can take it.
   claimRef:
     namespace: airflow
     name: airflow-logs
