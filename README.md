@@ -11,6 +11,7 @@ Production-ready Kubernetes manifests and runbooks for common stateful workloads
 | [Monitoring](monitoring/README.md)                               | kube-prometheus-stack (Prometheus + Grafana) | k3d                |
 | [OpenBao](openbao/README.md)                                     | OpenBao (Vault-compatible)                   | k3d                |
 | [External Secrets Operator](external-secrets-operator/README.md) | external-secrets/external-secrets            | k3d                |
+| [Apache Airflow](airflow/README.md)                              | apache-airflow/airflow (CeleryExecutor)      | k3d                |
 
 ## Cluster Setup
 

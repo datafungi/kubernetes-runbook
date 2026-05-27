@@ -1,0 +1,160 @@
+# Apache Airflow Helm Chart — k3d (Local Development)
+# Chart:    apache-airflow/airflow  v1.21.0
+# App:      Apache Airflow          3.2.0
+# Executor: CeleryExecutor
+# Database: external PostgreSQL (CNPG pg-cluster — direct primary, no PgBouncer)
+# Broker:   external Redis Sentinel (OpsTree — sentinel-{0,1,2}.sentinel.redis)
+# DAGs:     GitSync sidecar (SSH, no DAG PVC) → LocalDagBundle via dag-processor
+# Logs:     hostPath PVC (ReadWriteMany, shared across all k3d nodes — see logs-storage.yaml)
+#
+# Airflow 3.x component changes vs 2.x:
+#   - apiServer    replaces webserver ('airflow api-server', port 8080)
+#   - dagProcessor is a new required component ('airflow dag-processor')
+#   - apiSecretKeySecretName + jwtSecretName replace webserverSecretKeySecretName
+#
+# All credentials are injected from Kubernetes Secrets created by ESO.
+# No plaintext passwords appear in this file.
+
+airflowVersion: "3.2.0"
+defaultAirflowTag: "3.2.0"
+
+executor: "CeleryExecutor"
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+# Kubernetes Secrets are created by ESO (see externalsecrets.yaml).
+data:
+  metadataSecretName: airflow-metadata-db   # must have key: connection
+  fernetKeySecretName: airflow-fernet-key   # must have key: fernet-key
+
+# Airflow 3: API server secret key ([api] secret_key in airflow.cfg)
+# Replaces the deprecated webserverSecretKeySecretName
+apiSecretKeySecretName: airflow-api-secret   # must have key: api-secret-key
+
+# Airflow 3: JWT signing key ([api_auth] jwt_secret in airflow.cfg)
+jwtSecretName: airflow-jwt-secret   # must have key: jwt-secret
+
+# ── Environment overrides (sensitive) ────────────────────────────────────────
+# Celery broker and result backend contain passwords and must stay in Secrets.
+# Injected via secretKeyRef so passwords never appear in ConfigMaps.
+env:
+  - name: AIRFLOW__CELERY__BROKER_URL
+    valueFrom:
+      secretKeyRef:
+        name: airflow-celery
+        key: broker-url
+  - name: AIRFLOW__CELERY__RESULT_BACKEND
+    valueFrom:
+      secretKeyRef:
+        name: airflow-metadata-db
+        key: result-backend
+
+# ── Airflow configuration (non-sensitive) ────────────────────────────────────
+# Rendered into a ConfigMap by the chart. Do not put secrets here.
+config:
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  # Required for CeleryExecutor with Redis Sentinel:
+  # tells Kombu/Celery which Sentinel master group to follow.
+  AIRFLOW__CELERY__BROKER_TRANSPORT_OPTIONS: '{"master_name": "myMaster"}'
+
+# ── DAGs: GitSync sidecar (SSH, no PVC) ──────────────────────────────────────
+# The chart injects the git-sync sidecar into the dag-processor and worker pods.
+# git-sync clones the repo into /opt/airflow/dags which the dagProcessor reads
+# via LocalDagBundle (the chart's default dagBundleConfigList entry).
+dags:
+  gitSync:
+    enabled: true
+    repo: "git@github.com:<your-org>/<your-dags-repo>.git"
+    branch: "main"
+    subPath: ""          # DAGs at repo root; set to "dags/" if they live in a subdirectory
+    sshKeySecret: airflow-ssh-secret   # Kubernetes Secret with key gitSshKey
+    # Replace with the actual fingerprint of your Git host.
+    # Retrieve with: ssh-keyscan github.com
+    knownHosts: |
+      github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+
+# ── Logs: persistent volume ───────────────────────────────────────────────────
+# The PVC is created by logs-storage.yaml (hostPath, ReadWriteMany).
+# All Airflow pods can write logs regardless of which agent node they land on
+# because the underlying host path (/tmp/k3d-storage/airflow-logs) is bind-
+# mounted into every k3d node container.
+logs:
+  persistence:
+    enabled: true
+    existingClaim: airflow-logs
+
+# ── API Server (Airflow 3.x, replaces webserver) ──────────────────────────────
+# Runs 'airflow api-server'. Serves the UI and REST API on port 8080.
+apiServer:
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# ── DAG Processor (Airflow 3.x, required) ────────────────────────────────────
+# Runs 'airflow dag-processor'. Parses and registers DAG files separately
+# from the scheduler. Auto-enabled by the chart for airflowVersion >= 3.0.0.
+dagProcessor:
+  logGroomerSidecar:
+    enabled: false   # disabled: log persistence handles retention
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+scheduler:
+  logGroomerSidecar:
+    enabled: false   # disabled: log persistence handles retention
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# ── Workers ───────────────────────────────────────────────────────────────────
+workers:
+  replicas: 1
+  celery:
+    logGroomerSidecar:
+      enabled: false   # disabled: log persistence handles retention
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# ── Triggerer ─────────────────────────────────────────────────────────────────
+triggerer:
+  logGroomerSidecar:
+    enabled: false   # disabled: log persistence handles retention
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── Disable bundled PostgreSQL and Redis ──────────────────────────────────────
+postgresql:
+  enabled: false
+
+redis:
+  enabled: false
+
+# ── PgBouncer (chart built-in) ────────────────────────────────────────────────
+# Disabled: the CNPG cluster already provides a PgBouncer pooler at
+# pg-cluster-pooler-rw. Airflow's metadata connection bypasses it
+# (see externalsecrets.yaml comment) to avoid transaction-mode restrictions.
+pgbouncer:
+  enabled: false

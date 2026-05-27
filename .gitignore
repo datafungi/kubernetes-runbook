@@ -215,3 +215,6 @@ terraform.rc
 
 # Coding Agents
 .claude
+
+# Volume mounts
+mnt/
