@@ -218,3 +218,7 @@ terraform.rc
 
 # Volume mounts
 mnt/
+
+# The generic lib/ rule above (Python artefacts) would also exclude scripts/lib/.
+# Explicitly track it.
+!scripts/lib/
