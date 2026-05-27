@@ -1,0 +1,31 @@
+# Celery result backend — db+postgresql:// URI, built from Airflow DB credentials.
+#
+# Kept separate from airflow-metadata-db because:
+#   - metadata uses postgresql+psycopg2:// (SQLAlchemy dialect)
+#   - result backend uses db+postgresql://  (Celery kombu dialect)
+# Both chart fields (data.metadataSecretName, data.resultBackendSecretName)
+# expect a secret with key 'connection', so they must be in distinct Secrets.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-result-backend
+  namespace: airflow
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: airflow-result-backend
+    template:
+      data:
+        connection: "db+postgresql://{{ .user }}:{{ .password }}@pg-cluster-rw.postgres.svc.cluster.local:5432/airflow"
+  data:
+    - secretKey: user
+      remoteRef:
+        key: airflow/metadata-db
+        property: user
+    - secretKey: password
+      remoteRef:
+        key: airflow/metadata-db
+        property: password

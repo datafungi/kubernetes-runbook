@@ -26,37 +26,29 @@ executor: "CeleryExecutor"
 # ── Secrets ──────────────────────────────────────────────────────────────────
 # Kubernetes Secrets are created by ESO (see externalsecrets/).
 data:
-  metadataSecretName: airflow-metadata-db   # must have key: connection
-  fernetKeySecretName: airflow-fernet-key   # must have key: fernet-key
+  metadataSecretName: airflow-metadata-db       # must have key: connection
+  brokerUrlSecretName: airflow-celery           # must have key: connection
+  resultBackendSecretName: airflow-result-backend  # must have key: connection
+
+# Top-level (not inside data:) in chart 1.21.0
+fernetKeySecretName: airflow-fernet-key         # must have key: fernet-key
 
 # Airflow 3: API server secret key ([api] secret_key in airflow.cfg)
-apiSecretKeySecretName: airflow-api-secret   # must have key: api-secret-key
+apiSecretKeySecretName: airflow-api-secret      # must have key: api-secret-key
 
 # Airflow 3: JWT signing key ([api_auth] jwt_secret in airflow.cfg)
-jwtSecretName: airflow-jwt-secret   # must have key: jwt-secret
-
-# ── Environment overrides (sensitive) ────────────────────────────────────────
-# Celery broker and result backend contain passwords — injected via secretKeyRef
-# so passwords never appear in ConfigMaps.
-env:
-  - name: AIRFLOW__CELERY__BROKER_URL
-    valueFrom:
-      secretKeyRef:
-        name: airflow-celery
-        key: broker-url
-  - name: AIRFLOW__CELERY__RESULT_BACKEND
-    valueFrom:
-      secretKeyRef:
-        name: airflow-metadata-db
-        key: result-backend
+jwtSecretName: airflow-jwt-secret              # must have key: jwt-secret
 
 # ── Airflow configuration (non-sensitive) ────────────────────────────────────
-# Rendered into a ConfigMap by the chart. Do not put secrets here.
+# Rendered into a ConfigMap by the chart. Use TOML-style nested keys (chart 1.21.0).
+# Do not put secrets here.
 config:
-  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-  # Required for CeleryExecutor with Redis Sentinel:
-  # tells Kombu/Celery which Sentinel master group to follow.
-  AIRFLOW__CELERY__BROKER_TRANSPORT_OPTIONS: '{"master_name": "myMaster"}'
+  core:
+    load_examples: 'False'
+  celery:
+    # Required for CeleryExecutor with Redis Sentinel:
+    # tells Kombu/Celery which Sentinel master group to follow.
+    broker_transport_options: '{"master_name": "myMaster"}'
 
 # ── Logs: persistent volume ───────────────────────────────────────────────────
 # The PVC is created by logs-storage.yaml (hostPath, ReadWriteMany).
@@ -110,13 +102,13 @@ workers:
   celery:
     logGroomerSidecar:
       enabled: false
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "1"
-      memory: "1Gi"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "768Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
 
 # ── Triggerer ─────────────────────────────────────────────────────────────────
 triggerer:

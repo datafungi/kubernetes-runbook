@@ -286,20 +286,23 @@ _airflow_apply_externalsecrets() {
   kubectl apply -f "${es_dir}/jwt-secret.yaml"
   kubectl apply -f "${es_dir}/metadata-db.yaml"
   kubectl apply -f "${es_dir}/celery.yaml"
+  kubectl apply -f "${es_dir}/result-backend.yaml"
 
-  local expected=5
+  local expected=6
   if [[ "$_AIRFLOW_DAGS_MODE" == "gitsync" ]]; then
     kubectl apply -f "${es_dir}/git.yaml"
-    expected=6
+    expected=7
   fi
 
   log_info "Waiting for all ${expected} ExternalSecrets to sync (up to 5 min)..."
   local deadline=$(( SECONDS + 300 ))
   while [[ $SECONDS -lt $deadline ]]; do
     local synced
+    # grep -c always prints a count; use || true so a zero-match exit-1 doesn't
+    # trigger || echo which would produce "0\n0" and break the -ge comparison.
     synced=$(kubectl get externalsecrets -n airflow \
       -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].reason}' 2>/dev/null \
-      | tr ' ' '\n' | grep -c "^SecretSynced$" || echo 0)
+      | tr ' ' '\n' | grep -c "^SecretSynced$" || true)
     if [[ "${synced:-0}" -ge "$expected" ]]; then
       log_info "All ${expected} ExternalSecrets synced"
       return
@@ -357,27 +360,43 @@ EOF
 _airflow_wait_for_rollout() {
   log_step "Waiting for Airflow rollout"
 
-  # The migration job name depends on the chart; discover it dynamically.
-  log_info "Looking for database migration job..."
+  # The migration job runs as a Helm pre-install hook and may complete (and be
+  # cleaned up via hook-delete-policy) before this function is even called.
+  # Give it a short window; if not found, assume it already succeeded (the
+  # deployments below won't start until migration is done).
+  log_info "Looking for database migration job (30 s window)..."
   local migration_job=""
-  local deadline=$(( SECONDS + 120 ))
+  local deadline=$(( SECONDS + 30 ))
   while [[ $SECONDS -lt $deadline ]]; do
     migration_job=$(kubectl get jobs -n airflow \
       --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null \
-      | grep -E 'migration|db-migrate' | head -1 || true)
+      | grep -E 'migration|run-airflow' | head -1 || true)
     [[ -n "$migration_job" ]] && break
-    sleep 5
+    sleep 3
   done
-  [[ -n "$migration_job" ]] \
-    || die "Could not find a database migration job in namespace 'airflow'"
 
-  wait_for_job "$migration_job" airflow 5m
-  wait_for_job airflow-create-user airflow 5m
+  if [[ -n "$migration_job" ]]; then
+    wait_for_job "$migration_job" airflow 5m
+  else
+    log_info "Migration job already completed (cleaned up) — skipping wait"
+  fi
+
+  # create-user job may also finish quickly; treat as best-effort
+  local create_user_deadline=$(( SECONDS + 60 ))
+  while [[ $SECONDS -lt $create_user_deadline ]]; do
+    kubectl get job airflow-create-user -n airflow >/dev/null 2>&1 && break
+    sleep 3
+  done
+  if kubectl get job airflow-create-user -n airflow >/dev/null 2>&1; then
+    wait_for_job airflow-create-user airflow 5m
+  else
+    log_info "create-user job already completed (cleaned up) — skipping wait"
+  fi
 
   wait_for_rollout deployment  airflow-api-server    airflow
   wait_for_rollout deployment  airflow-scheduler     airflow
   wait_for_rollout deployment  airflow-dag-processor airflow
-  wait_for_rollout deployment  airflow-triggerer     airflow
+  wait_for_rollout statefulset airflow-triggerer     airflow   # StatefulSet in Airflow 3.x
   wait_for_rollout statefulset airflow-worker        airflow
 }
 
