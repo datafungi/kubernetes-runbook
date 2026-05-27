@@ -1,0 +1,15 @@
+# Cluster-wide StorageClass for static hostPath volumes (k3d local development).
+#
+# All nodes bind-mount ./mnt to /var/lib/rancher/k3s/storage, so a hostPath PV
+# resolves to the same directory on every node — no node affinity is needed.
+#
+# Apply once before deploying any workloads:
+#   kubectl apply -f setup/k3d/storage.yaml
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-retain
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+reclaimPolicy: Retain

@@ -6,11 +6,14 @@ servers: 1
 agents: 3
 network: k3dcluster
 volumes:
-  # Mounts a host path into each node so PostgreSQL PV data persists across
-  # cluster restarts. The local-path provisioner writes to this path.
-  - volume: /tmp/k3d-storage:/var/lib/rancher/k3s/storage
+  # Bind-mounts the repo's mnt/ directory into every node as the local-path
+  # provisioner storage root. All PV data (Redis, OpenBao, Postgres, …) is
+  # written here, so it survives cluster restarts and is visible on the host.
+  # Use an absolute path — k3d does not expand ~ or relative paths.
+  - volume: /home/neil/workspaces/kubernetes-runbook/mnt:/var/lib/rancher/k3s/storage
     nodeFilters:
       - all
+
 options:
   runtime:
     # Server node only runs control-plane components — 2g is sufficient.

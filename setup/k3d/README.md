@@ -21,6 +21,13 @@ The cluster is defined in [`config.yaml`](./config.yaml):
 
 The server node is tainted `node-role.kubernetes.io/control-plane:NoSchedule` so no workloads schedule on it. All three agent nodes are available exclusively for application pods, giving each PostgreSQL instance a dedicated 4 GB node.
 
+The repo's `mnt/` directory is bind-mounted into every node at `/var/lib/rancher/k3s/storage` — the root used by the `local-path` StorageClass. All PV data (PostgreSQL, Redis, OpenBao, Airflow logs) is written under `mnt/` and survives cluster restarts. Use an absolute path in the config; k3d does not expand `~` or relative paths.
+
+| Host path (repo-relative) | In-container path                   | Used by                                      |
+|---------------------------|-------------------------------------|----------------------------------------------|
+| `mnt/`                    | `/var/lib/rancher/k3s/storage/`     | `local-path` StorageClass root               |
+| `mnt/airflow/`            | `/var/lib/rancher/k3s/storage/airflow/` | Airflow log PV (`airflow/k3d/logs-storage.yaml`) |
+
 ## Creating the Cluster
 
 ### If Tailscale is enabled
@@ -85,5 +92,5 @@ Adjust the `--cpus` value to suit your machine. The changes take effect immediat
 ## Notes
 
 - The `serversMemory` / `agentsMemory` settings in `config.yaml` map to Docker's `--memory` flag for each container. You can also adjust memory after creation with `docker update --memory=<value>`.
-- The volume mount (`/tmp/k3d-storage`) is defined in `config.yaml` and applied to all nodes automatically. PostgreSQL PV data written by the `local-path` provisioner persists at `/tmp/k3d-storage/pvc-<uid>_<namespace>_<pvc-name>/` on your host.
+- The volume mount is defined in `config.yaml` and applied to all nodes automatically. All PV data written by the `local-path` provisioner persists under `mnt/pvc-<uid>_<namespace>_<pvc-name>/` on your host. Static hostPath PVs (OpenBao, Redis, Airflow logs) write directly to their configured subdirectories under `mnt/`.
 - The server node taint (`node-role.kubernetes.io/control-plane:NoSchedule`) is applied via a k3s `--node-taint` server arg in `config.yaml`. No additional configuration is needed on the PostgreSQL side — pods without a matching toleration are automatically excluded from the server node.
