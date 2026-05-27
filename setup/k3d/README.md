@@ -12,20 +12,26 @@
 
 The cluster is defined in [`config.yaml`](./config.yaml):
 
-| Setting        | Value             |
-|----------------|-------------------|
-| Cluster name   | `simple-cluster`  |
-| Docker network | `k3dcluster`      |
+| Setting        | Value                                                   |
+|----------------|---------------------------------------------------------|
+| Cluster name   | `simple-cluster`                                        |
+| Docker network | `k3dcluster`                                            |
 | Server nodes   | 1 (2 GB RAM) — control plane only, tainted `NoSchedule` |
-| Agent nodes    | 3 (4 GB RAM each) — one per PostgreSQL instance |
+| Agent nodes    | 3 (4 GB RAM each) — one per PostgreSQL instance         |
 
 The server node is tainted `node-role.kubernetes.io/control-plane:NoSchedule` so no workloads schedule on it. All three agent nodes are available exclusively for application pods, giving each PostgreSQL instance a dedicated 4 GB node.
 
-The repo's `mnt/` directory is bind-mounted into every node at `/var/lib/rancher/k3s/storage` — the root used by the `local-path` StorageClass. All PV data (PostgreSQL, Redis, OpenBao, Airflow logs) is written under `mnt/` and survives cluster restarts. Use an absolute path in the config; k3d does not expand `~` or relative paths.
+The repo's `mnt/` directory is bind-mounted into every node at `/var/lib/rancher/k3s/storage` — the root used by the `local-path` StorageClass. All PV data (PostgreSQL, Redis, OpenBao, Airflow logs) is written under `mnt/` and survives cluster restarts.
 
-| Host path (repo-relative) | In-container path                   | Used by                                      |
-|---------------------------|-------------------------------------|----------------------------------------------|
-| `mnt/`                    | `/var/lib/rancher/k3s/storage/`     | `local-path` StorageClass root               |
+`config.yaml` uses a `REPO_ROOT_PLACEHOLDER` token for the volume path because k3d requires an absolute path and the repo location differs per machine. The install script substitutes it automatically. To create the cluster manually, run the substitution yourself:
+
+```bash
+sed "s|REPO_ROOT_PLACEHOLDER|$(pwd)|g" setup/k3d/config.yaml | k3d cluster create --config -
+```
+
+| Host path (repo-relative) | In-container path                       | Used by                                          |
+|---------------------------|-----------------------------------------|--------------------------------------------------|
+| `mnt/`                    | `/var/lib/rancher/k3s/storage/`         | `local-path` StorageClass root                   |
 | `mnt/airflow/`            | `/var/lib/rancher/k3s/storage/airflow/` | Airflow log PV (`airflow/k3d/logs-storage.yaml`) |
 
 ## Creating the Cluster

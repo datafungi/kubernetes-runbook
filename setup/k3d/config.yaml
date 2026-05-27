@@ -9,8 +9,14 @@ volumes:
   # Bind-mounts the repo's mnt/ directory into every node as the local-path
   # provisioner storage root. All PV data (Redis, OpenBao, Postgres, …) is
   # written here, so it survives cluster restarts and is visible on the host.
-  # Use an absolute path — k3d does not expand ~ or relative paths.
-  - volume: /home/neil/workspaces/kubernetes-runbook/mnt:/var/lib/rancher/k3s/storage
+  #
+  # The path below uses a placeholder that the install script replaces with the
+  # absolute path to this repository before passing the config to k3d.
+  # To create the cluster manually without the install script:
+  #
+  #   sed 's|REPO_ROOT_PLACEHOLDER|'"$(pwd)"'|g' \
+  #     setup/k3d/config.yaml | k3d cluster create --config -
+  - volume: REPO_ROOT_PLACEHOLDER/mnt:/var/lib/rancher/k3s/storage
     nodeFilters:
       - all
 
