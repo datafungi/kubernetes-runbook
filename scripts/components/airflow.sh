@@ -216,8 +216,10 @@ _airflow_setup_secrets() {
   else
     log_info "Generating Fernet key..."
     local fernet_key
+    # Fernet key = 32 random bytes, URL-safe base64-encoded.
+    # Use stdlib only (no third-party 'cryptography' package required).
     fernet_key=$(python3 -c \
-      "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+      "import os, base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
     bao kv put secret/airflow/fernet-key fernet-key="$fernet_key"
     log_info "Fernet key stored"
   fi
