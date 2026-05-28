@@ -8,6 +8,25 @@
 - [k3d](https://k3d.io/#installation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 
+### Docker daemon DNS (required on systemd-resolved hosts)
+
+On Linux hosts that use `systemd-resolved` (Fedora, Ubuntu 20.04+), `/etc/resolv.conf` points to
+the local stub resolver at `127.0.0.53`. Docker containers cannot reach that address, so image pulls
+fail with `SERVFAIL` after a host reboot. Add the real upstream DNS to `/etc/docker/daemon.json`
+before creating the cluster (or before the first reboot):
+
+```json
+{
+  "dns": ["<your-upstream-dns>", "1.1.1.1"]
+}
+```
+
+Find your upstream: `awk '/^nameserver/{print $2; exit}' /run/systemd/resolve/resolv.conf`
+
+Apply without restarting Docker: `sudo systemctl reload docker` (or restart Docker if reload is
+not supported). `startup.sh` patches node `/etc/resolv.conf` at runtime as a belt-and-suspenders
+measure, but `daemon.json` is the durable fix.
+
 ## Cluster Configuration
 
 The cluster is defined in [`config.yaml`](./config.yaml):
@@ -94,6 +113,19 @@ docker update --cpus=2 k3d-simple-cluster-agent-2
 ```
 
 Adjust the `--cpus` value to suit your machine. The changes take effect immediately without restarting the containers.
+
+## After a Host Restart
+
+k3d survives host reboots automatically, but several stack components need manual recovery steps
+(OpenBao re-seals, Redis loses replication state, etc.). Run the startup script once after every
+host reboot:
+
+```bash
+./scripts/startup.sh
+```
+
+It handles, in order: k3d node DNS, ImagePullBackOff pods, CoreDNS, Redis split-brain, OpenBao
+unseal, ESO ClusterSecretStore, and ExternalSecret force-sync.
 
 ## Notes
 

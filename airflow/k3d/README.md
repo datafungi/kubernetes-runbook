@@ -134,8 +134,8 @@ export BAO_TOKEN=$(kubectl get secret openbao-unseal-keys -n openbao \
 ```
 
 ```bash
-# Fernet key
-FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# Fernet key (stdlib only — no third-party packages required)
+FERNET_KEY=$(python3 -c "import os, base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
 bao kv put secret/airflow/fernet-key fernet-key="$FERNET_KEY"
 
 # API server + JWT secrets (Airflow 3.x)
@@ -159,6 +159,7 @@ kubectl create namespace airflow
 
 # Storage
 mkdir -p mnt/airflow/logs mnt/airflow/dags
+chmod 777 mnt/airflow/logs   # Airflow containers run as UID 50000; logs dir must be world-writable
 kubectl apply -f airflow/k3d/logs-storage.yaml
 # local mode only:
 kubectl apply -f airflow/k3d/dags-storage.yaml
