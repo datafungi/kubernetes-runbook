@@ -121,7 +121,7 @@ k3d survives host reboots automatically, but several stack components need manua
 host reboot:
 
 ```bash
-./scripts/startup.sh
+./scripts/k3d/startup.sh
 ```
 
 It handles, in order: k3d node DNS, ImagePullBackOff pods, CoreDNS, Redis split-brain, OpenBao

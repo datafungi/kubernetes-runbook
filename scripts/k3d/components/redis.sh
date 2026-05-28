@@ -101,6 +101,17 @@ teardown_redis() {
   kubectl delete -f "${REPO_ROOT}/redis/k3d/sentinel.yaml"     2>/dev/null || true
   kubectl delete -f "${REPO_ROOT}/redis/k3d/replication.yaml"  2>/dev/null || true
   kubectl delete -f "${REPO_ROOT}/redis/k3d/externalsecret.yaml" 2>/dev/null || true
+
+  # Delete PVCs before PVs — PVCs are from StatefulSet volumeClaimTemplates
+  # (not tracked by Helm) and keep PVs Bound, causing kubectl delete pv to hang.
+  kubectl delete pvc \
+    redis-replication-redis-replication-0 \
+    redis-replication-redis-replication-1 \
+    redis-replication-redis-replication-2 \
+    -n redis --ignore-not-found 2>/dev/null || true
+  for pv in redis-replication-0 redis-replication-1 redis-replication-2; do
+    kubectl patch pv "$pv" -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+  done
   kubectl delete -f "${REPO_ROOT}/redis/k3d/volumes.yaml"      2>/dev/null || true
 
   log_info "Waiting for Redis pods to terminate..."

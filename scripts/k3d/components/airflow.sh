@@ -413,6 +413,9 @@ teardown_airflow() {
   local es_dir="${REPO_ROOT}/airflow/k3d/externalsecrets"
   kubectl delete -f "${es_dir}/" 2>/dev/null || true
 
+  for pv in airflow-logs airflow-dags; do
+    kubectl patch pv "$pv" -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+  done
   kubectl delete -f "${REPO_ROOT}/airflow/k3d/logs-storage.yaml" 2>/dev/null || true
   kubectl delete -f "${REPO_ROOT}/airflow/k3d/dags-storage.yaml" 2>/dev/null || true
 
@@ -427,15 +430,26 @@ teardown_airflow() {
   echo
   read -rp "Remove Airflow secrets from OpenBao? [y/N]: " _confirm
   if [[ "${_confirm,,}" == "y" ]]; then
-    trap 'stop_openbao_portforward' RETURN
-    start_openbao_portforward
-    for path in airflow/fernet-key airflow/api airflow/metadata-db airflow/git; do
-      bao kv delete "secret/${path}" 2>/dev/null \
-        && log_info "Deleted secret/${path}" \
-        || log_warn "secret/${path} not found — skipping"
-    done
+    local openbao_running
+    openbao_running=$(kubectl get pod openbao-0 -n openbao --no-headers 2>/dev/null \
+      | awk '{print $3}' || true)
+    if [[ "$openbao_running" == "Running" ]]; then
+      trap 'stop_openbao_portforward' RETURN
+      start_openbao_portforward
+      for path in airflow/fernet-key airflow/api airflow/metadata-db airflow/git; do
+        bao kv delete "secret/${path}" 2>/dev/null \
+          && log_info "Deleted secret/${path}" \
+          || log_warn "secret/${path} not found — skipping"
+      done
+    else
+      log_warn "OpenBao pod is not Running (state: ${openbao_running:-not found}) — skipping secret deletion."
+      log_warn "If you reinstall OpenBao, delete these secrets manually first:"
+      for path in airflow/fernet-key airflow/api airflow/metadata-db airflow/git; do
+        log_warn "  bao kv delete secret/${path}"
+      done
+    fi
   fi
 
   log_warn "Log and DAG data in mnt/airflow/ is preserved."
-  log_warn "Remove manually if no longer needed: rm -rf ${REPO_ROOT}/mnt/airflow/"
+  log_warn "Remove manually if no longer needed: sudo rm -rf ${REPO_ROOT}/mnt/airflow/"
 }

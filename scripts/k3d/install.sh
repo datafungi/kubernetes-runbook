@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# scripts/install.sh — k3d stack installer
+# scripts/k3d/install.sh — k3d stack installer
 #
 # Usage:
-#   ./scripts/install.sh install  <component|all>
-#   ./scripts/install.sh teardown <component|all>
+#   ./scripts/k3d/install.sh install  <component|all>
+#   ./scripts/k3d/install.sh teardown <component|all>
 #
 # Components (dependency order):
 #   cluster   k3d cluster + local-retain StorageClass
@@ -14,12 +14,12 @@
 #   airflow   Apache Airflow 3.2.0 (CeleryExecutor)
 #
 # Environment variables consumed by individual components are documented in
-# each scripts/components/<name>.sh file and in the top-level README.
+# each scripts/k3d/components/<name>.sh file and in the top-level README.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 export SCRIPT_DIR REPO_ROOT
 

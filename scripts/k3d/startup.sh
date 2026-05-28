@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# scripts/startup.sh — recover the k3d stack after a host or cluster restart
+# scripts/k3d/startup.sh — recover the k3d stack after a host or cluster restart
 #
-# Usage: ./scripts/startup.sh
+# Usage: ./scripts/k3d/startup.sh
 #
 # Run this once after any host restart. It handles the steps that cannot be
 # automated inside Kubernetes itself:

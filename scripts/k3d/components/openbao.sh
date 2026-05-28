@@ -42,9 +42,25 @@ install_openbao() {
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 _openbao_init() {
-  if kubectl get secret openbao-unseal-keys -n openbao >/dev/null 2>&1; then
-    log_info "OpenBao already initialized — skipping init"
-    return
+  # Check actual init state from OpenBao's storage backend.
+  # The k8s Secret alone is not reliable: it lives in the namespace and gets
+  # deleted when the cluster is torn down, but mnt/openbao/data/ persists.
+  # bao status exits 2 when sealed (normal) — suppress that with || true.
+  local bao_status initialized
+  bao_status=$(kubectl exec -n openbao openbao-0 -- \
+    bao status -format=json 2>/dev/null || true)
+  initialized=$(echo "$bao_status" \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('initialized', False))" \
+    2>/dev/null || echo "false")
+
+  if [[ "${initialized,,}" == "true" ]]; then
+    if kubectl get secret openbao-unseal-keys -n openbao >/dev/null 2>&1; then
+      log_info "OpenBao already initialized — skipping init"
+      return
+    fi
+    # Initialized on disk but k8s Secret is missing: the cluster was deleted
+    # without running teardown, so the Secret was lost with the namespace.
+    die "OpenBao is already initialized on disk but 'openbao-unseal-keys' is missing.\nThe cluster was likely recreated without running teardown first.\nWipe the stale data and retry:\n  rm -rf mnt/openbao/data\n  ./scripts/k3d/install.sh install openbao"
   fi
 
   log_info "Initializing OpenBao (1 key share, threshold 1)..."
@@ -144,9 +160,31 @@ teardown_openbao() {
     && log_info "Secret 'openbao-unseal-keys' removed" \
     || true
 
+  # Delete the PVC first (it's created by the StatefulSet volumeClaimTemplate,
+  # not tracked by Helm). The PV won't release until its PVC is gone, and
+  # kubectl delete pv hangs on the kubernetes.io/pv-protection finalizer while
+  # the PVC still exists.
+  kubectl delete pvc data-openbao-0 -n openbao --ignore-not-found 2>/dev/null || true
+  # Belt-and-suspenders: patch the PV finalizer away so the delete never hangs
+  # regardless of PVC state (e.g. pod stuck Terminating).
+  kubectl patch pv openbao-data -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
   kubectl delete -f "${REPO_ROOT}/openbao/k3d/volumes.yaml" 2>/dev/null || true
 
   kubectl delete namespace openbao 2>/dev/null \
     && log_info "Namespace 'openbao' removed" \
     || log_warn "Namespace 'openbao' not found — skipping"
+
+  # Persistent data survives teardown (Retain policy). Prompt to wipe it so
+  # a subsequent install.sh install openbao starts with a clean slate.
+  local data_dir="${REPO_ROOT}/mnt/openbao/data"
+  if [[ -d "$data_dir" && -n "$(ls -A "$data_dir" 2>/dev/null)" ]]; then
+    echo
+    read -rp "Wipe OpenBao data directory (${data_dir})? Required for a clean reinstall. [y/N]: " _confirm
+    if [[ "${_confirm,,}" == "y" ]]; then
+      sudo rm -rf "$data_dir"
+      log_info "OpenBao data directory wiped."
+    else
+      log_warn "Data directory preserved. Run 'rm -rf ${data_dir}' before reinstalling."
+    fi
+  fi
 }

@@ -79,7 +79,12 @@ teardown_postgres() {
     && log_info "Namespace 'postgres' removed" \
     || log_warn "Namespace 'postgres' not found — skipping"
 
-  # Delete static PVs after namespace is gone (PVs are cluster-scoped)
+  # Delete static PVs after namespace is gone (PVs are cluster-scoped).
+  # Patch finalizers first — PVCs from CNPG StatefulSets keep PVs Bound and
+  # cause kubectl delete pv to hang on kubernetes.io/pv-protection.
+  for pv in pg-cluster-1 pg-cluster-2 pg-cluster-3; do
+    kubectl patch pv "$pv" -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+  done
   kubectl delete -f "${REPO_ROOT}/postgres/k3d/volumes.yaml" 2>/dev/null || true
 
   helm uninstall cnpg -n cnpg-system 2>/dev/null \

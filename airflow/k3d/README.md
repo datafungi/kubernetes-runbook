@@ -66,17 +66,17 @@ Deploy in this order: **OpenBao → ESO → PostgreSQL → Redis → Airflow**
 Or use the install script:
 
 ```bash
-./scripts/install.sh install all
+./scripts/k3d/install.sh install all
 ```
 
 ## Installation (install script — recommended)
 
 ```bash
 # Full stack
-./scripts/install.sh install all
+./scripts/k3d/install.sh install all
 
 # Airflow only (prereqs must already be running)
-./scripts/install.sh install airflow
+./scripts/k3d/install.sh install airflow
 ```
 
 The script handles all of the following automatically:
@@ -93,10 +93,10 @@ DAG mode and gitsync parameters can be set via environment variables or entered 
 AIRFLOW_DAGS_MODE=gitsync \
 AIRFLOW_DAGS_REPO=git@github.com:org/dags.git \
 AIRFLOW_GIT_SSH_KEY_FILE=~/.ssh/dags-deploy-key \
-  ./scripts/install.sh install airflow
+  ./scripts/k3d/install.sh install airflow
 
 # Non-interactive local example
-AIRFLOW_DAGS_MODE=local ./scripts/install.sh install airflow
+AIRFLOW_DAGS_MODE=local ./scripts/k3d/install.sh install airflow
 ```
 
 ## Manual installation
@@ -249,7 +249,7 @@ helm upgrade airflow apache-airflow/airflow \
 ## Tear-down
 
 ```bash
-./scripts/install.sh teardown airflow
+./scripts/k3d/install.sh teardown airflow
 ```
 
 Or manually:

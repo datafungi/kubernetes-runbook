@@ -10,7 +10,7 @@ install_eso() {
   helm upgrade --install external-secrets external-secrets/external-secrets \
     --namespace external-secrets --create-namespace \
     -f "${REPO_ROOT}/external-secrets-operator/k3d/values.yaml" \
-    --wait --timeout 3m
+    --wait --timeout 5m
 
   wait_for_rollout deployment external-secrets external-secrets
 

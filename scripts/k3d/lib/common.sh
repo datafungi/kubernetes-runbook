@@ -102,12 +102,34 @@ start_openbao_portforward() {
     >/dev/null 2>&1 &
   _OPENBAO_PF_PID=$!
 
-  # Wait for the port to be reachable (up to 15 s)
+  # Wait for the port to respond to any HTTP request (no -f: 503 sealed is OK
+  # here — we just want to confirm the tunnel is up).
   local deadline=$(( SECONDS + 15 ))
-  until curl -sf http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1; do
+  until curl -s --max-time 2 http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1; do
     [[ $SECONDS -lt $deadline ]] || die "OpenBao port-forward did not become ready in time"
     sleep 1
   done
+
+  # Auto-unseal if sealed (common after a host restart or a fresh cluster).
+  local sealed
+  sealed=$(curl -s http://127.0.0.1:8200/v1/sys/health \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sealed', True))" \
+    2>/dev/null || echo "true")
+
+  if [[ "${sealed,,}" == "true" ]]; then
+    log_info "OpenBao is sealed — unsealing..."
+    local unseal_key
+    unseal_key=$(kubectl get secret openbao-unseal-keys -n openbao \
+      -o jsonpath='{.data.unseal-key}' | base64 -d)
+    kubectl exec -n openbao openbao-0 -- bao operator unseal "$unseal_key" >/dev/null
+    # Wait for active state (health returns 200)
+    deadline=$(( SECONDS + 15 ))
+    until curl -sf http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1; do
+      [[ $SECONDS -lt $deadline ]] || die "OpenBao did not become active after unseal"
+      sleep 1
+    done
+    log_info "OpenBao unsealed"
+  fi
 
   export BAO_ADDR="http://127.0.0.1:8200"
   export BAO_TOKEN
