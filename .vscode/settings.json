@@ -1,5 +1,8 @@
 {
   "yaml.schemas": {
+    "https://raw.githubusercontent.com/apache/airflow/helm-chart/1.21.0/chart/values.schema.json": [
+      "airflow/**/values*.yaml"
+    ],
     "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/postgresql.cnpg.io/cluster_v1.json": [
       "postgres/**/cluster.yaml"
     ],

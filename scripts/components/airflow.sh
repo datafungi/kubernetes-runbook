@@ -265,6 +265,8 @@ _airflow_setup_storage() {
   mkdir -p \
     "${REPO_ROOT}/mnt/airflow/logs" \
     "${REPO_ROOT}/mnt/airflow/dags"
+  # Airflow containers run as UID 50000; logs dir must be world-writable.
+  chmod 777 "${REPO_ROOT}/mnt/airflow/logs"
 
   log_info "Applying log PV + PVC..."
   kubectl apply -f "${REPO_ROOT}/airflow/k3d/logs-storage.yaml"
