@@ -1,6 +1,6 @@
 # kubernetes-runbook
 
-Production-ready Kubernetes manifests and runbooks for common stateful workloads.
+Production-ready Kubernetes manifests and runbooks for common data platform workloads.
 
 ## Services
 
